@@ -1,0 +1,14 @@
+cache/
+tools/
+node_modules/
+.DS_Store
+nohup.out
+*.log
+
+# local Claude Code settings (machine-specific paths, not for sharing)
+.claude/settings.local.json
+
+# python venv used when testing the dbbasic package locally
+.venv/
+__pycache__/
+*.pyc

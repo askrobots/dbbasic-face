@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Puppet Stage</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", sans-serif;
+    background: #14161d; color: #e6e8ee;
+    display: grid; grid-template-columns: 1fr 340px;
+    height: 100vh; overflow: hidden;
+  }
+  main { display: flex; flex-direction: column; min-width: 0; }
+
+  #stage {
+    position: relative; flex: 1; overflow: hidden;
+    background: linear-gradient(#2b3350 0%, #3d4670 62%, #23283c 62%, #1a1e2e 100%);
+  }
+  #camera {
+    position: absolute; inset: 0;
+    transform-origin: 0 0;
+    transition: transform .9s cubic-bezier(.22,.61,.36,1);
+  }
+  #puppet-pos {
+    position: absolute; bottom: 9%; left: 50%;
+    transform: translateX(-50%);
+  }
+  #puppet-flip { transform-origin: 50% 100%; }
+  #puppet-flip svg { display: block; filter: drop-shadow(0 14px 10px rgba(0,0,0,.35)); }
+
+  #prompter {
+    position: absolute; left: 12px; top: 12px; width: 300px; max-height: 45%;
+    overflow-y: auto; padding: 10px 12px; border-radius: 10px;
+    background: rgba(10,12,18,.78); font-size: 13px; line-height: 1.9;
+    display: none; backdrop-filter: blur(4px);
+  }
+  #prompter.active { display: block; }
+  .p-line { opacity: .45; transition: opacity .2s; white-space: pre-wrap; }
+  .p-line.now { opacity: 1; color: #ffd479; font-weight: 600; }
+
+  #toast {
+    position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+    background: #b33; color: #fff; padding: 8px 16px; border-radius: 8px;
+    opacity: 0; transition: opacity .3s; pointer-events: none; font-size: 13px;
+  }
+  #toast.show { opacity: 1; }
+
+  aside {
+    border-left: 1px solid #2a2e3d; padding: 16px; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 18px; background: #191c26;
+  }
+  h1 { font-size: 15px; letter-spacing: .04em; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: #8b93ab; }
+  section { display: flex; flex-direction: column; gap: 8px; }
+  input[type=text], select, textarea, button {
+    font: inherit; color: inherit; background: #232735;
+    border: 1px solid #343a4e; border-radius: 8px; padding: 8px 10px;
+  }
+  textarea { min-height: 170px; resize: vertical; font-family: ui-monospace, monospace; font-size: 12px; }
+  button { cursor: pointer; }
+  button:hover { background: #2e3448; }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; min-width: 0; }
+  #actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  #actions button { flex: 0 0 auto; font-size: 12px; padding: 6px 10px; }
+  button.primary { background: #4c6ef5; border-color: #4c6ef5; }
+  button.primary:hover { background: #5c7cfa; }
+  input[type=range] { width: 100%; }
+  label { font-size: 12px; color: #8b93ab; }
+</style>
+</head>
+<body>
+  <main>
+    <div id="stage">
+      <div id="camera">
+        <div id="puppet-pos"><div id="puppet-flip"></div></div>
+      </div>
+      <div id="prompter"></div>
+      <div id="toast"></div>
+    </div>
+  </main>
+
+  <aside>
+    <h1>🎭 Puppet Stage</h1>
+
+    <section>
+      <h2>Character</h2>
+      <select id="character"></select>
+    </section>
+
+    <section>
+      <h2>Speak</h2>
+      <form id="say-form">
+        <div class="row" style="margin-bottom:8px">
+          <select id="engine">
+            <option value="say">say (macOS)</option>
+            <option value="espeak">espeak</option>
+          </select>
+          <select id="voice"><option value="">default voice</option></select>
+        </div>
+        <div class="row">
+          <input type="text" id="say-text" placeholder="Type something to say…" autocomplete="off">
+          <button class="primary" style="flex:0 0 auto">Say</button>
+        </div>
+      </form>
+      <div class="row" style="align-items:center">
+        <span id="audio-state" style="font-size:12px;color:#8b93ab">audio: —</span>
+        <button id="beep" type="button" style="flex:0 0 auto;font-size:12px">🔊 test beep</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Direct</h2>
+      <div id="actions"></div>
+      <label>walk to position</label>
+      <input type="range" id="walk" min="5" max="95" value="50">
+    </section>
+
+    <section>
+      <h2>Screenplay</h2>
+      <textarea id="script" spellcheck="false"></textarea>
+      <div class="row">
+        <button class="primary" id="run-script">▶ Run</button>
+        <button id="stop-script">■ Stop</button>
+      </div>
+    </section>
+  </aside>
+
+  <script>
+    // ?shot: hold the load event open so headless screenshots capture the booted stage
+    if (location.search.includes('shot')) document.write('<img src="/slowpx?d=3000" style="display:none">');
+  </script>
+  <script src="stage.js"></script>
+</body>
+</html>

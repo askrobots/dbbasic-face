@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 560">
+  <defs>
+    <clipPath id="ava-eye-left"><path d="M80,64 Q88,56.5 96.5,63 Q88,71.5 80,64 Z"/></clipPath>
+    <clipPath id="ava-eye-right"><path d="M123.5,63 Q132,56.5 140,64 Q132,71.5 123.5,63 Z"/></clipPath>
+  </defs>
+  <g id="puppet" style="transform-box:fill-box;transform-origin:50% 100%">
+
+    <g id="legs">
+      <path d="M72,246 Q110,258 148,246 L150,302 Q110,314 70,302 Z" fill="#3d5578"/>
+      <path id="leg-left" d="M78,300 C76,360 80,420 84,470 L84,528 L106,528 L104,470 C106,420 106,360 108,305 Z" fill="#46608a"/>
+      <path id="leg-right" d="M112,305 C114,360 114,420 116,470 L114,528 L136,528 L136,470 C140,420 144,360 142,300 Z" fill="#46608a"/>
+      <ellipse cx="94" cy="534" rx="17" ry="8" fill="#6b4450"/>
+      <ellipse cx="126" cy="534" rx="17" ry="8" fill="#6b4450"/>
+    </g>
+
+    <g id="arm-left" style="transform-box:fill-box;transform-origin:50% 5%">
+      <path d="M68,175 C62,205 64,245 70,285" stroke="#eab88f" stroke-width="10" fill="none" stroke-linecap="round"/>
+      <ellipse cx="71" cy="292" rx="5.5" ry="8" fill="#eab88f"/>
+      <path d="M74,146 C64,150 58,160 60,178 C66,182 74,180 78,176 C78,164 78,154 74,146 Z" fill="#ad7280"/>
+    </g>
+    <g id="arm-right" style="transform-box:fill-box;transform-origin:50% 5%">
+      <path d="M152,175 C158,205 156,245 150,285" stroke="#eab88f" stroke-width="10" fill="none" stroke-linecap="round"/>
+      <ellipse cx="149" cy="292" rx="5.5" ry="8" fill="#eab88f"/>
+      <path d="M146,146 C156,150 162,160 160,178 C154,182 146,180 142,176 C142,164 142,154 146,146 Z" fill="#ad7280"/>
+    </g>
+
+    <g id="torso">
+      <path d="M64,152 C70,140 90,131 110,131 C130,131 150,140 156,152 C159,178 158,205 154,232 C152,246 140,252 110,252 C80,252 68,246 66,232 C62,205 61,178 64,152 Z" fill="#c2848f"/>
+      <path d="M92,131 Q110,144 128,131 Q120,138 110,138 Q100,138 92,131 Z" fill="#ab6f7c"/>
+    </g>
+
+    <g id="hair-back">
+      <path d="M110,16 C66,18 52,54 56,100 C58,148 52,186 62,210 C76,222 96,222 100,214 C92,170 92,130 94,100 L126,100 C128,130 128,170 120,214 C124,222 144,222 158,210 C168,186 162,148 164,100 C168,54 154,18 110,16 Z" fill="#3b2a1f"/>
+    </g>
+
+    <g id="neck">
+      <path d="M100,98 L100,132 Q110,141 120,132 L120,98 Z" fill="#eab88f"/>
+      <path d="M100,102 Q110,111 120,102 L120,107 Q110,115 100,107 Z" fill="#d49c72" opacity="0.35"/>
+    </g>
+
+    <g id="head" style="transform-box:fill-box;transform-origin:50% 88%">
+      <path d="M110,26 C90,26 78,44 79,66 C80,88 92,104 110,109 C128,104 140,88 141,66 C142,44 130,26 110,26 Z" fill="#f0c29c"/>
+      <path d="M132,84 C128,96 120,104 112,107" stroke="#d8a279" stroke-width="1.5" fill="none" opacity="0.3"/>
+
+      <ellipse id="cheek-left" cx="88" cy="81" rx="6.5" ry="3.6" fill="#e78f83" opacity="0.22"/>
+      <ellipse id="cheek-right" cx="132" cy="81" rx="6.5" ry="3.6" fill="#e78f83" opacity="0.22"/>
+
+      <g id="brows">
+        <path id="brow-left" style="transform-box:fill-box;transform-origin:50% 50%"
+              d="M80,53.5 Q88,49.5 96,52" stroke="#33241a" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+        <path id="brow-right" style="transform-box:fill-box;transform-origin:50% 50%"
+              d="M124,52 Q132,49.5 140,53.5" stroke="#33241a" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+      </g>
+
+      <g id="eyes" style="transform-box:fill-box;transform-origin:50% 50%">
+        <path d="M80,64 Q88,56.5 96.5,63 Q88,71.5 80,64 Z" fill="#fdfbf7"/>
+        <path d="M123.5,63 Q132,56.5 140,64 Q132,71.5 123.5,63 Z" fill="#fdfbf7"/>
+        <g clip-path="url(#ava-eye-left)">
+          <g class="iris">
+            <circle cx="88" cy="64.5" r="4.4" fill="#7a5230"/>
+            <circle cx="88" cy="64.5" r="2" fill="#1e1410"/>
+            <circle cx="86.7" cy="63.2" r="1" fill="#fff"/>
+          </g>
+        </g>
+        <g clip-path="url(#ava-eye-right)">
+          <g class="iris">
+            <circle cx="132" cy="64.5" r="4.4" fill="#7a5230"/>
+            <circle cx="132" cy="64.5" r="2" fill="#1e1410"/>
+            <circle cx="130.7" cy="63.2" r="1" fill="#fff"/>
+          </g>
+        </g>
+        <path d="M80,63.8 Q88,57 96.5,63" stroke="#241a12" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+        <path d="M123.5,63 Q132,57 140,63.8" stroke="#241a12" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+      </g>
+
+      <g id="nose">
+        <path d="M106.5,68 Q105,78 102.5,85.5" stroke="#d8a279" stroke-width="1.4" fill="none" opacity="0.45"/>
+        <path d="M102.5,86.5 Q106,89.5 110.5,87.5" stroke="#c98f66" stroke-width="1.4" fill="none" stroke-linecap="round" opacity="0.8"/>
+      </g>
+
+      <!-- Rhubarb visemes as realistic lip shapes; one visible at a time -->
+      <g id="mouths">
+        <g id="mouth-X">
+          <path d="M98,95.6 C103,92.6 107,93.4 110,94.8 C113,93.4 117,92.6 122,95.6 C117,97 113,97.4 110,97.4 C107,97.4 103,97 98,95.6 Z" fill="#c06b74"/>
+          <path d="M99,96 Q110,102.6 121,96 Q110,98.8 99,96 Z" fill="#d67f88"/>
+        </g>
+        <g id="mouth-A">
+          <path d="M97,95.6 Q110,92.8 123,95.6 Q110,97.2 97,95.6 Z" fill="#c06b74"/>
+          <path d="M98,96 Q110,100.6 122,96 Q110,97.6 98,96 Z" fill="#d67f88"/>
+        </g>
+        <g id="mouth-B">
+          <path d="M99,94.5 Q110,92 121,94.5 Q121,100.5 110,101.5 Q99,100.5 99,94.5 Z" fill="#5a2a30"/>
+          <rect x="102" y="94.6" width="16" height="3" rx="1.2" fill="#fbf6f0"/>
+          <path d="M99,94.5 Q110,91.8 121,94.5" stroke="#c06b74" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+          <path d="M99,94.8 Q110,102.5 121,94.8" stroke="#d67f88" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+        </g>
+        <g id="mouth-C">
+          <path d="M100,93 Q110,90.5 120,93 Q122,101 110,104 Q98,101 100,93 Z" fill="#5a2a30"/>
+          <rect x="102" y="93.4" width="16" height="3.4" rx="1.4" fill="#fbf6f0"/>
+          <path d="M100,93 Q110,90.2 120,93 Q122,101.5 110,104.5 Q98,101.5 100,93 Z" stroke="#c06b74" stroke-width="1.6" fill="none"/>
+        </g>
+        <g id="mouth-D">
+          <path d="M97,92 Q110,89 123,92 Q126,103 110,108 Q94,103 97,92 Z" fill="#5a2a30"/>
+          <rect x="100" y="92.6" width="20" height="3.6" rx="1.5" fill="#fbf6f0"/>
+          <ellipse cx="110" cy="103.5" rx="8" ry="3.5" fill="#c46a72"/>
+          <path d="M97,92 Q110,88.6 123,92 Q126,103.5 110,108.5 Q94,103.5 97,92 Z" stroke="#c06b74" stroke-width="1.6" fill="none"/>
+        </g>
+        <g id="mouth-E">
+          <ellipse cx="110" cy="97.5" rx="7.5" ry="5.5" fill="#5a2a30"/>
+          <ellipse cx="110" cy="97.5" rx="7.5" ry="5.5" stroke="#c06b74" stroke-width="1.8" fill="none"/>
+        </g>
+        <g id="mouth-F">
+          <ellipse cx="110" cy="97" rx="4.6" ry="5.6" fill="#5a2a30"/>
+          <ellipse cx="110" cy="97" rx="5.4" ry="6.4" stroke="#d67f88" stroke-width="2.6" fill="none"/>
+        </g>
+        <g id="mouth-G">
+          <rect x="103" y="94" width="14" height="3.4" rx="1.4" fill="#fbf6f0" stroke="#8a4a52" stroke-width="0.8"/>
+          <path d="M100,99 Q110,102.5 120,99" stroke="#d67f88" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+        </g>
+        <g id="mouth-H">
+          <path d="M100,93.5 Q110,91 120,93.5 Q122,102 110,104.5 Q98,102 100,93.5 Z" fill="#5a2a30"/>
+          <ellipse cx="110" cy="95.4" rx="5.5" ry="2.6" fill="#c46a72"/>
+          <path d="M100,93.5 Q110,90.7 120,93.5 Q122,102.5 110,105 Q98,102.5 100,93.5 Z" stroke="#c06b74" stroke-width="1.6" fill="none"/>
+        </g>
+      </g>
+
+      <g id="hair-front">
+        <path d="M79,64 C78,40 92,24 110,24 C128,24 142,40 141,64 C141,70 140,76 139,80 C138,58 128,44 110,44 C92,44 82,58 81,80 C80,76 79,70 79,64 Z" fill="#3b2a1f"/>
+        <path d="M110,25 C109,31 109,37 110,43" stroke="#2c1f16" stroke-width="1.2" fill="none" opacity="0.6"/>
+      </g>
+    </g>
+  </g>
+</svg>
