@@ -348,9 +348,14 @@ function directionCue(body, source, frameIds) {
   }
 
   if (head === 'lower-third') {
+    // stable id so a new lower-third replaces the current one instead of
+    // stacking; `[lower-third clear]` removes it.
+    if ((parts[1] || '').toLowerCase() === 'clear' && !body.includes('"')) {
+      return { type: 'overlay-clear', id: 'lower-third', source };
+    }
     const strs = [...body.matchAll(/"([^"]*)"/g)].map((m) => m[1]);
     return {
-      type: 'overlay', template: 'lower-third',
+      type: 'overlay', template: 'lower-third', id: 'lower-third',
       slots: { title: strs[0] || '', subtitle: strs[1] || '' }, source,
     };
   }
@@ -405,9 +410,12 @@ function characterVoice(name) {
   return voice;
 }
 
-async function runScript(src, mainCharacter) {
-  const token = ++scriptToken;
-  const cues = parseScript(src);
+// Single ordered pass over a parsed cue list that replays the same
+// settings/frameChar/override-flag state the (formerly inline) speak handler
+// used, and attaches the fully-resolved TTS params to every speak cue as
+// `cue.speech`. Pulling this out lets runScript render speech ahead of the
+// playback loop instead of only when a line is about to play.
+function resolveSpeech(cues, mainCharacter) {
   const settings = { engine: 'say', voice: '', rate: 0 };
   let engineOverridden = false;
   let voiceOverridden = false;
@@ -417,21 +425,14 @@ async function runScript(src, mainCharacter) {
   // declared voice too.
   const frameChar = {};
   if (mainCharacter) frameChar.main = mainCharacter;
-  broadcast({ type: 'script-start', lines: cues.map((c) => c.source) });
 
-  for (let i = 0; i < cues.length; i++) {
-    if (token !== scriptToken) break; // stopped or replaced
-    const cue = cues[i];
-    broadcast({ type: 'script-line', index: i });
-
+  for (const cue of cues) {
     if (cue.type === 'setting') {
       settings[cue.key] = cue.value;
       if (cue.key === 'engine') engineOverridden = true;
       if (cue.key === 'voice') voiceOverridden = true;
       continue;
     }
-    if (cue.type === 'wait') { await sleep(cue.seconds * 1000); continue; }
-
     if (cue.type === 'frame' && cue.character) frameChar[cue.id] = cue.character;
     if (cue.type === 'character') frameChar[cue.frame || 'main'] = cue.name;
 
@@ -442,11 +443,55 @@ async function runScript(src, mainCharacter) {
       const cv = characterVoice(frameChar[cue.frame || 'main']);
       const engine = engineOverridden ? settings.engine : (cv && cv.engine) || settings.engine;
       const voice = voiceOverridden ? settings.voice : (cv && cv.voice !== undefined ? cv.voice : settings.voice);
+      cue.speech = { text: cue.text, engine, voice, rate: settings.rate };
+    }
+  }
+}
+
+const RENDER_WINDOW = 3;
+
+async function runScript(src, mainCharacter) {
+  const token = ++scriptToken;
+  const cues = parseScript(src);
+  resolveSpeech(cues, mainCharacter);
+  const speakCues = cues.filter((c) => c.type === 'speak');
+
+  // Bounded render-ahead: kick off prepareSpeech for the k-th speak cue at
+  // most once, and stash the promise on the cue itself. Calling this
+  // repeatedly (e.g. re-priming a window that's already full) is a no-op.
+  function ensureRender(k) {
+    if (k < 0 || k >= speakCues.length) return;
+    const c = speakCues[k];
+    if (!c._renderP) {
+      c._renderP = prepareSpeech(c.speech);
+      c._renderP.catch(() => {}); // avoid unhandled-rejection noise; real errors surface at the await below
+    }
+  }
+
+  broadcast({ type: 'script-start', lines: cues.map((c) => c.source) });
+
+  for (let k = 0; k < RENDER_WINDOW; k++) ensureRender(k);
+  let speakIndex = 0;
+
+  for (let i = 0; i < cues.length; i++) {
+    if (token !== scriptToken) break; // stopped or replaced
+    const cue = cues[i];
+    broadcast({ type: 'script-line', index: i });
+
+    if (cue.type === 'setting' || cue.type === 'wait') {
+      if (cue.type === 'wait') await sleep(cue.seconds * 1000);
+      continue;
+    }
+
+    if (cue.type === 'speak') {
+      const k = speakIndex++;
+      ensureRender(k); // in case it wasn't primed (e.g. window > remaining lines)
       let prepared;
       try {
-        prepared = await prepareSpeech({ text: cue.text, engine, voice, rate: settings.rate });
+        prepared = await cue._renderP;
       } catch (e) {
         broadcast({ type: 'error', message: e.message });
+        ensureRender(k + RENDER_WINDOW);
         continue;
       }
       if (token !== scriptToken) break;
@@ -455,6 +500,7 @@ async function runScript(src, mainCharacter) {
       if (cue.frame) speakCue.frame = cue.frame;
       broadcast(speakCue);
       await sleep(prepared.duration * 1000 + 300);
+      ensureRender(k + RENDER_WINDOW);
       continue;
     }
 

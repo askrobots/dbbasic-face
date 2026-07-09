@@ -302,8 +302,11 @@ _HTML = r'''<!doctype html>
     }
 
     if (head === 'lower-third') {
+      if ((parts[1] || '').toLowerCase() === 'clear' && !body.includes('"')) {
+        return { type: 'overlay-clear', id: 'lower-third' };
+      }
       const strs = [...body.matchAll(/"([^"]*)"/g)].map((m) => m[1]);
-      return { type: 'overlay', template: 'lower-third', slots: { title: strs[0] || '', subtitle: strs[1] || '' } };
+      return { type: 'overlay', template: 'lower-third', id: 'lower-third', slots: { title: strs[0] || '', subtitle: strs[1] || '' } };
     }
 
     if (head === 'walk' || head === 'enter' || head === 'exit') {
@@ -367,9 +370,13 @@ _HTML = r'''<!doctype html>
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   let scriptToken = 0;
 
-  async function runScript(src, mainCharacter) {
-    const token = ++scriptToken;
-    const cues = parseScript(src);
+  // Single ordered pass over a parsed cue list that replays the same
+  // settings/frameChar/override-flag state runScript used to thread through
+  // its loop, attaching the fully-resolved TTS params to every speak-line
+  // cue as `cue.resolved`. Mirrors server.js's resolveSpeech so voices stay
+  // identical; pulling it out lets runScript render speech ahead of when a
+  // line is posted instead of only right before.
+  function resolveSpeech(cues, mainCharacter) {
     const settings = { engine: 'say', voice: '', rate: 0 };
     let engineOverridden = false;
     let voiceOverridden = false;
@@ -378,21 +385,14 @@ _HTML = r'''<!doctype html>
     // this shim. Seeded with the client's notion of who's in the main frame.
     const frameChar = {};
     if (mainCharacter) frameChar.main = mainCharacter;
-    await postCue({ type: 'script-start', lines: cues.map((c) => c.source) });
 
-    for (let i = 0; i < cues.length; i++) {
-      if (token !== scriptToken) break;
-      const cue = cues[i];
-      await postCue({ type: 'script-line', index: i });
-
+    for (const cue of cues) {
       if (cue.type === 'setting') {
         settings[cue.key] = cue.value;
         if (cue.key === 'engine') engineOverridden = true;
         if (cue.key === 'voice') voiceOverridden = true;
         continue;
       }
-      if (cue.type === 'wait') { await sleep(cue.seconds * 1000); continue; }
-
       if (cue.type === 'frame' && cue.character) frameChar[cue.id] = cue.character;
       if (cue.type === 'character') frameChar[cue.frame || 'main'] = cue.name;
 
@@ -404,16 +404,58 @@ _HTML = r'''<!doctype html>
         const cv = ch && ch.manifest && ch.manifest.voice;
         const engine = engineOverridden ? settings.engine : (cv && cv.engine) || settings.engine;
         const voice = voiceOverridden ? settings.voice : (cv && cv.voice !== undefined ? cv.voice : settings.voice);
-        const resolved = { engine, voice, rate: settings.rate };
-        // render once to learn the real duration, then broadcast; each
-        // stage re-renders the (deterministic) audio on receipt
-        const d = await renderSpeech({ text: cue.text, ...resolved });
+        cue.resolved = { engine, voice, rate: settings.rate };
+      }
+    }
+  }
+
+  const RENDER_WINDOW = 3;
+
+  async function runScript(src, mainCharacter) {
+    const token = ++scriptToken;
+    const cues = parseScript(src);
+    resolveSpeech(cues, mainCharacter);
+    const speakCues = cues.filter((c) => c.type === 'speak-line');
+
+    // Bounded render-ahead: kick off renderSpeech for the k-th speak-line
+    // cue at most once, stashing the promise on the cue itself (learns the
+    // real duration; each stage re-renders the deterministic audio on
+    // receipt of the say-text cue). Safe to call repeatedly.
+    function ensureRender(k) {
+      if (k < 0 || k >= speakCues.length) return;
+      const c = speakCues[k];
+      if (!c._renderP) {
+        c._renderP = renderSpeech({ text: c.text, ...c.resolved });
+        c._renderP.catch(() => {}); // avoid unhandled-rejection noise; real errors surface at the await below
+      }
+    }
+
+    await postCue({ type: 'script-start', lines: cues.map((c) => c.source) });
+
+    for (let k = 0; k < RENDER_WINDOW; k++) ensureRender(k);
+    let speakIndex = 0;
+
+    for (let i = 0; i < cues.length; i++) {
+      if (token !== scriptToken) break;
+      const cue = cues[i];
+      await postCue({ type: 'script-line', index: i });
+
+      if (cue.type === 'setting' || cue.type === 'wait') {
+        if (cue.type === 'wait') await sleep(cue.seconds * 1000);
+        continue;
+      }
+
+      if (cue.type === 'speak-line') {
+        const k = speakIndex++;
+        ensureRender(k); // in case it wasn't primed (e.g. window > remaining lines)
+        const d = await cue._renderP;
         if (token !== scriptToken) break;
         if (cue.concurrent) await postCue(cue.concurrent);
-        const sayCue = { type: 'say-text', text: cue.text, ...resolved };
+        const sayCue = { type: 'say-text', text: cue.text, ...cue.resolved };
         if (cue.frame) sayCue.frame = cue.frame;
         await postCue(sayCue);
         await sleep(((d.duration || cue.text.split(/\s+/).length * 0.35) * 1000) + 400);
+        ensureRender(k + RENDER_WINDOW);
         continue;
       }
 
@@ -700,6 +742,11 @@ class Puppet {
     if (fromSide === 'right') this.setX(115, 0);
     await new Promise((r) => requestAnimationFrame(r)); // flush the teleport
     const stageW = this.stage.clientWidth;
+    if (pct >= 0 && pct <= 100) { // on-stage target: keep the whole character inside the frame
+      const charW = this.flip.getBoundingClientRect().width;
+      const halfPct = (charW / stageW) * 100 / 2;
+      pct = halfPct > 50 ? 50 : Math.min(Math.max(pct, halfPct), 100 - halfPct);
+    } // else: deliberate off-stage target (enter/exit) — leave as-is
     const distPx = Math.abs(pct - this.x) / 100 * stageW;
     const speed = (this.manifest.walk && this.manifest.walk.speed) || 220;
     const ms = Math.max(200, distPx / speed * 1000);
@@ -1098,7 +1145,10 @@ function handleCue(cue) {
       loadCharacter(cue.name, id);
       break;
     }
-    case 'script-start': prompterStart(cue.lines); break;
+    case 'script-start':
+      for (const f of stage.frames.values()) if (f.puppet) f.puppet.stopSpeaking();
+      prompterStart(cue.lines);
+      break;
     case 'script-line': prompterHighlight(cue.index); break;
     case 'script-end': prompterEnd(); break;
     case 'error': toast(cue.message); break;

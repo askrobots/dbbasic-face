@@ -228,6 +228,11 @@ class Puppet {
     if (fromSide === 'right') this.setX(115, 0);
     await new Promise((r) => requestAnimationFrame(r)); // flush the teleport
     const stageW = this.stage.clientWidth;
+    if (pct >= 0 && pct <= 100) { // on-stage target: keep the whole character inside the frame
+      const charW = this.flip.getBoundingClientRect().width;
+      const halfPct = (charW / stageW) * 100 / 2;
+      pct = halfPct > 50 ? 50 : Math.min(Math.max(pct, halfPct), 100 - halfPct);
+    } // else: deliberate off-stage target (enter/exit) — leave as-is
     const distPx = Math.abs(pct - this.x) / 100 * stageW;
     const speed = (this.manifest.walk && this.manifest.walk.speed) || 220;
     const ms = Math.max(200, distPx / speed * 1000);
@@ -626,7 +631,10 @@ function handleCue(cue) {
       loadCharacter(cue.name, id);
       break;
     }
-    case 'script-start': prompterStart(cue.lines); break;
+    case 'script-start':
+      for (const f of stage.frames.values()) if (f.puppet) f.puppet.stopSpeaking();
+      prompterStart(cue.lines);
+      break;
     case 'script-line': prompterHighlight(cue.index); break;
     case 'script-end': prompterEnd(); break;
     case 'error': toast(cue.message); break;
