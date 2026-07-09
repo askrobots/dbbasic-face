@@ -367,10 +367,17 @@ _HTML = r'''<!doctype html>
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   let scriptToken = 0;
 
-  async function runScript(src) {
+  async function runScript(src, mainCharacter) {
     const token = ++scriptToken;
     const cues = parseScript(src);
     const settings = { engine: 'say', voice: '', rate: 0 };
+    let engineOverridden = false;
+    let voiceOverridden = false;
+    // frame id -> character name; mirrors server.js's resolution so a
+    // screenplay sounds the same whether it runs against the real server or
+    // this shim. Seeded with the client's notion of who's in the main frame.
+    const frameChar = {};
+    if (mainCharacter) frameChar.main = mainCharacter;
     await postCue({ type: 'script-start', lines: cues.map((c) => c.source) });
 
     for (let i = 0; i < cues.length; i++) {
@@ -378,16 +385,32 @@ _HTML = r'''<!doctype html>
       const cue = cues[i];
       await postCue({ type: 'script-line', index: i });
 
-      if (cue.type === 'setting') { settings[cue.key] = cue.value; continue; }
+      if (cue.type === 'setting') {
+        settings[cue.key] = cue.value;
+        if (cue.key === 'engine') engineOverridden = true;
+        if (cue.key === 'voice') voiceOverridden = true;
+        continue;
+      }
       if (cue.type === 'wait') { await sleep(cue.seconds * 1000); continue; }
 
+      if (cue.type === 'frame' && cue.character) frameChar[cue.id] = cue.character;
+      if (cue.type === 'character') frameChar[cue.frame || 'main'] = cue.name;
+
       if (cue.type === 'speak-line') {
+        // Resolution: an explicit [engine]/[voice] direction always wins;
+        // otherwise use the declared voice of the character in this line's
+        // frame; otherwise fall back to the (default) settings.
+        const ch = CHARACTERS[frameChar[cue.frame || 'main']];
+        const cv = ch && ch.manifest && ch.manifest.voice;
+        const engine = engineOverridden ? settings.engine : (cv && cv.engine) || settings.engine;
+        const voice = voiceOverridden ? settings.voice : (cv && cv.voice !== undefined ? cv.voice : settings.voice);
+        const resolved = { engine, voice, rate: settings.rate };
         // render once to learn the real duration, then broadcast; each
         // stage re-renders the (deterministic) audio on receipt
-        const d = await renderSpeech({ text: cue.text, ...settings });
+        const d = await renderSpeech({ text: cue.text, ...resolved });
         if (token !== scriptToken) break;
         if (cue.concurrent) await postCue(cue.concurrent);
-        const sayCue = { type: 'say-text', text: cue.text, ...settings };
+        const sayCue = { type: 'say-text', text: cue.text, ...resolved };
         if (cue.frame) sayCue.frame = cue.frame;
         await postCue(sayCue);
         await sleep(((d.duration || cue.text.split(/\s+/).length * 0.35) * 1000) + 400);
@@ -432,7 +455,8 @@ _HTML = r'''<!doctype html>
       return jsonResponse(d.status === 'ok' ? { ok: true } : { error: d.error }, d.status === 'ok' ? 200 : 500);
     }
     if (u === '/api/script') {
-      runScript(JSON.parse(opts.body || '{}').script || ''); // fire and forget
+      const body = JSON.parse(opts.body || '{}');
+      runScript(body.script || '', body.mainCharacter); // fire and forget
       return jsonResponse({ ok: true });
     }
     if (u === '/api/script/stop') {
@@ -1232,7 +1256,10 @@ $id('walk').addEventListener('change', (e) => {
   post('/api/cue', { type: 'walk', x: parseInt(e.target.value, 10), frame: 'main' });
 });
 
-$id('run-script').onclick = () => post('/api/script', { script: $id('script').value });
+$id('run-script').onclick = () => {
+  const p = mainPuppet();
+  post('/api/script', { script: $id('script').value, mainCharacter: p && p.characterName });
+};
 $id('stop-script').onclick = () => post('/api/script/stop', {});
 
 async function loadCharacter(name, frameId = 'main', extra = {}) {

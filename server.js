@@ -389,10 +389,34 @@ function directionCue(body, source, frameIds) {
 
 let scriptToken = 0;
 
-async function runScript(src) {
+// Per-character declared voice, e.g. characters/ava/manifest.json's
+// `"voice": {"engine":"say","voice":"Samantha"}`. Cached by character name
+// so screenplays with many lines don't re-read manifests per cue.
+const characterVoiceCache = {};
+function characterVoice(name) {
+  if (!name) return null;
+  if (Object.prototype.hasOwnProperty.call(characterVoiceCache, name)) return characterVoiceCache[name];
+  let voice = null;
+  try {
+    const manifest = JSON.parse(fs.readFileSync(path.join(CHARACTERS, name, 'manifest.json'), 'utf8'));
+    if (manifest && manifest.voice) voice = manifest.voice;
+  } catch { /* missing/unreadable manifest; fall back to default voice */ }
+  characterVoiceCache[name] = voice;
+  return voice;
+}
+
+async function runScript(src, mainCharacter) {
   const token = ++scriptToken;
   const cues = parseScript(src);
   const settings = { engine: 'say', voice: '', rate: 0 };
+  let engineOverridden = false;
+  let voiceOverridden = false;
+  // frame id -> character name, so each spoken line can resolve the voice of
+  // whoever is actually in that frame. Seeded with the client's notion of
+  // who's in the main frame, so solo screenplays pick up that character's
+  // declared voice too.
+  const frameChar = {};
+  if (mainCharacter) frameChar.main = mainCharacter;
   broadcast({ type: 'script-start', lines: cues.map((c) => c.source) });
 
   for (let i = 0; i < cues.length; i++) {
@@ -400,13 +424,27 @@ async function runScript(src) {
     const cue = cues[i];
     broadcast({ type: 'script-line', index: i });
 
-    if (cue.type === 'setting') { settings[cue.key] = cue.value; continue; }
+    if (cue.type === 'setting') {
+      settings[cue.key] = cue.value;
+      if (cue.key === 'engine') engineOverridden = true;
+      if (cue.key === 'voice') voiceOverridden = true;
+      continue;
+    }
     if (cue.type === 'wait') { await sleep(cue.seconds * 1000); continue; }
 
+    if (cue.type === 'frame' && cue.character) frameChar[cue.id] = cue.character;
+    if (cue.type === 'character') frameChar[cue.frame || 'main'] = cue.name;
+
     if (cue.type === 'speak') {
+      // Resolution: an explicit [engine]/[voice] direction always wins;
+      // otherwise use the declared voice of the character in this line's
+      // frame; otherwise fall back to the (default) settings.
+      const cv = characterVoice(frameChar[cue.frame || 'main']);
+      const engine = engineOverridden ? settings.engine : (cv && cv.engine) || settings.engine;
+      const voice = voiceOverridden ? settings.voice : (cv && cv.voice !== undefined ? cv.voice : settings.voice);
       let prepared;
       try {
-        prepared = await prepareSpeech({ text: cue.text, ...settings });
+        prepared = await prepareSpeech({ text: cue.text, engine, voice, rate: settings.rate });
       } catch (e) {
         broadcast({ type: 'error', message: e.message });
         continue;
@@ -510,7 +548,7 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/script' && req.method === 'POST') {
       const body = await readBody(req);
       if (!body.script) return json(res, 400, { error: 'script required' });
-      runScript(body.script); // runs in background
+      runScript(body.script, body.mainCharacter); // runs in background
       return json(res, 200, { ok: true });
     }
 

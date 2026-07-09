@@ -784,7 +784,10 @@ $id('walk').addEventListener('change', (e) => {
   post('/api/cue', { type: 'walk', x: parseInt(e.target.value, 10), frame: 'main' });
 });
 
-$id('run-script').onclick = () => post('/api/script', { script: $id('script').value });
+$id('run-script').onclick = () => {
+  const p = mainPuppet();
+  post('/api/script', { script: $id('script').value, mainCharacter: p && p.characterName });
+};
 $id('stop-script').onclick = () => post('/api/script/stop', {});
 
 async function loadCharacter(name, frameId = 'main', extra = {}) {
