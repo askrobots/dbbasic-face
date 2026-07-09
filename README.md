@@ -8,6 +8,9 @@ code.
 
 Zero npm dependencies. One Node server, one static page.
 
+![Puppet Stage](docs/screenshot.png)
+*Ava, mid-scene, with the control panel.*
+
 ## Quick start
 
 ```sh
@@ -122,6 +125,9 @@ A character is a folder in `characters/<name>/` with two files — no code:
     `{ "face": { "focus": "#head", "fill": 0.62, "centerY": 0.48 } }` —
     enables the face close-up (`[view face]` / `[view body]` in scripts,
     🎥 buttons in the UI). Defaults to framing `#head` if omitted.
+
+    ![Face view close-up on Ava](docs/face-view.png)
+    *`[view face]` zooms the camera to the head framing.*
   - `idle`: ambient life while not speaking, e.g.
     `{ "breathe": { "target": "#torso", "amount": 1.4, "period": 4200 },
     "gaze": true }` (gaze randomly drifts the `look` target)
