@@ -58,12 +58,14 @@
       } catch { /* server briefly unreachable; keep polling */ }
       setTimeout(() => this.poll(), POLL_MS);
     }
-    async deliver(cue) {
-      if (cue.type === 'say-text') {
-        const d = await renderSpeech(cue);
+    async deliver(rawCue) {
+      let cue = rawCue;
+      if (rawCue.type === 'say-text') {
+        const d = await renderSpeech(rawCue);
         cue = d.status === 'ok'
           ? { type: 'speak', audio: d.audio, timeline: d.timeline, duration: d.duration, text: d.text }
           : { type: 'error', message: d.error || 'speech failed' };
+        if (cue.type === 'speak' && rawCue.frame) cue.frame = rawCue.frame;
       }
       if (this.onmessage) this.onmessage({ data: JSON.stringify(cue) });
     }
@@ -71,10 +73,76 @@
   window.EventSource = function () { return new PollingEventSource(); };
 
   // ------------------------------------------------- screenplay (client)
+  //
+  // Grammar mirrors server.js parseScript/directionCue exactly — keep the
+  // two in sync when either changes.
 
-  function directionCue(body) {
+  const LAYOUT_FRAMES = {
+    single: ['main'],
+    split: ['left', 'right'],
+    thirds: ['third-l', 'third-c', 'third-r'],
+    'pip-tr': ['main', 'pip'], 'pip-tl': ['main', 'pip'],
+    'pip-br': ['main', 'pip'], 'pip-bl': ['main', 'pip'],
+  };
+
+  function parseKV(str) {
+    const out = {};
+    const re = /([a-z][\w-]*):("([^"]*)"|\S+)/gi;
+    let m;
+    while ((m = re.exec(str))) out[m[1].toLowerCase()] = m[3] !== undefined ? m[3] : m[2];
+    return out;
+  }
+
+  function directionCue(body, frameIds) {
+    frameIds = frameIds || new Set(['main']);
     const parts = body.trim().split(/\s+/);
     const head = parts[0].toLowerCase();
+
+    if (head === 'layout') {
+      const preset = (parts[1] || 'single').toLowerCase();
+      const ids = LAYOUT_FRAMES[preset] || ['main'];
+      frameIds.clear();
+      for (const id of ids) frameIds.add(id);
+      return { type: 'layout', preset };
+    }
+
+    if (head === 'frame') {
+      const id = parts[1];
+      const restStr = parts.slice(2).join(' ');
+      if (/^clear\b/i.test(restStr)) {
+        frameIds.delete(id);
+        return { type: 'frame-clear', id };
+      }
+      const kv = parseKV(restStr);
+      const cue = { type: 'frame', id };
+      if (kv.slot) cue.slot = kv.slot;
+      if (kv.bg) cue.bg = kv.bg;
+      if (kv.character) cue.character = kv.character;
+      if (kv.view) cue.view = kv.view;
+      if (kv.facing !== undefined) cue.facing = parseInt(kv.facing, 10);
+      if (kv.rect) cue.rect = kv.rect.split(',').map(Number);
+      frameIds.add(id);
+      return cue;
+    }
+
+    if (head === 'scene') return { type: 'scene', bg: parts.slice(1).join(' ') };
+
+    if (head === 'show') {
+      const kv = parseKV(parts.slice(1).join(' '));
+      let kind = 'text', value = '';
+      for (const k of ['text', 'image', 'video']) {
+        if (kv[k] !== undefined) { kind = k; value = kv[k]; break; }
+      }
+      const cue = { type: 'content', kind, value };
+      if (kv.fit) cue.fit = kv.fit;
+      return cue;
+    }
+
+    if (head === 'lower-third') {
+      const strs = [...body.matchAll(/"([^"]*)"/g)].map((m) => m[1]);
+      return { type: 'overlay', template: 'lower-third', slots: { title: strs[0] || '', subtitle: strs[1] || '' } };
+    }
+
     if (head === 'walk' || head === 'enter' || head === 'exit') {
       const arg = parts[parts.length - 1].toLowerCase();
       let x = parseFloat(arg);
@@ -92,23 +160,42 @@
     if (head === 'engine' || head === 'voice' || head === 'rate') {
       return { type: 'setting', key: head, value: parts.slice(1).join(' ') };
     }
+
+    if (frameIds.has(head) && parts.length > 1) {
+      const sub = directionCue(parts.slice(1).join(' '), frameIds);
+      sub.frame = head;
+      return sub;
+    }
+
     return { type: 'action', name: head };
   }
 
   function parseScript(src) {
     const cues = [];
+    const frameIds = new Set(['main']);
     for (const rawLine of src.split('\n')) {
       const line = rawLine.trim();
       if (!line || line.startsWith('#')) continue;
       if (/^(\[[^\]]+\]\s*)+$/.test(line)) {
-        for (const m of line.matchAll(/\[([^\]]+)\]/g)) cues.push({ ...directionCue(m[1]), source: line });
+        for (const m of line.matchAll(/\[([^\]]+)\]/g)) cues.push({ ...directionCue(m[1], frameIds), source: line });
         continue;
       }
+
       let text = line;
+      let frame = null;
+      const speaker = text.match(/^([A-Za-z][\w-]*):\s*(.*)$/);
+      if (speaker && frameIds.has(speaker[1])) { frame = speaker[1]; text = speaker[2]; }
+
       let concurrent = null;
       const inline = text.match(/^\(([^)]+)\)\s*(.*)$/);
-      if (inline) { concurrent = { ...directionCue(inline[1]), source: line }; text = inline[2]; }
-      cues.push({ type: 'speak-line', text, concurrent, source: line });
+      if (inline) {
+        concurrent = { ...directionCue(inline[1], frameIds), source: line };
+        text = inline[2];
+        if (frame) concurrent.frame = frame;
+      }
+      const cue = { type: 'speak-line', text, concurrent, source: line };
+      if (frame) cue.frame = frame;
+      cues.push(cue);
     }
     return cues;
   }
@@ -137,7 +224,9 @@
         const d = await renderSpeech({ text: cue.text, ...settings });
         if (token !== scriptToken) break;
         if (cue.concurrent) await postCue(cue.concurrent);
-        await postCue({ type: 'say-text', text: cue.text, ...settings });
+        const sayCue = { type: 'say-text', text: cue.text, ...settings };
+        if (cue.frame) sayCue.frame = cue.frame;
+        await postCue(sayCue);
         await sleep(((d.duration || cue.text.split(/\s+/).length * 0.35) * 1000) + 400);
         continue;
       }

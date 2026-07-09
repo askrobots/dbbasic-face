@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- handle -->
+  <path d="M74,36 Q92,36 92,54 Q92,72 74,72" stroke="#a8362f" stroke-width="8" fill="none"/>
+  <!-- body -->
+  <rect x="24" y="30" width="50" height="46" rx="4" fill="#e8663c"/>
+  <rect x="24" y="30" width="50" height="10" rx="4" fill="#f2896a"/>
+  <!-- rim -->
+  <ellipse cx="49" cy="30" rx="25" ry="6" fill="#f2896a"/>
+  <ellipse cx="49" cy="30" rx="25" ry="6" fill="none" stroke="#c94f2a" stroke-width="2"/>
+</svg>

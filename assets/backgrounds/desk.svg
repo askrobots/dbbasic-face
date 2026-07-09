@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180">
+  <!-- wall -->
+  <rect x="0" y="0" width="320" height="180" fill="#26344a"/>
+  <!-- subtle wall panel band -->
+  <rect x="0" y="22" width="320" height="66" fill="#2f405c"/>
+  <rect x="0" y="30" width="320" height="4" fill="#3a4e6e" opacity="0.6"/>
+  <rect x="0" y="80" width="320" height="4" fill="#1d2939" opacity="0.6"/>
+  <!-- soft back-light glow, centered -->
+  <ellipse cx="160" cy="50" rx="120" ry="46" fill="#3d5578" opacity="0.35"/>
+  <!-- desk surface across the lower third -->
+  <rect x="0" y="122" width="320" height="58" fill="#5b4636"/>
+  <rect x="0" y="122" width="320" height="6" fill="#75593f"/>
+  <rect x="0" y="176" width="320" height="4" fill="#3d2f24"/>
+</svg>

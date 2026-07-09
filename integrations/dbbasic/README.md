@@ -16,6 +16,10 @@ changing `public/stage.js`, `public/index.html`, `shim.js`, or anything in
 (`shim.js`) that fakes `EventSource` with polling and maps `/api/*` onto the
 objects, so the package cannot drift from the main app.
 
+Frame, scene, and overlay directions (see the main README's "Scenes, frames &
+overlays" section) work through this package too — `shim.js` mirrors the same
+screenplay grammar, so scripts behave identically here and in the Node app.
+
 ## Install
 
 Machine running the object server needs `ffmpeg`, macOS `say` and/or

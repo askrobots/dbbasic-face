@@ -1,19 +1,63 @@
 'use strict';
 
+// --------------------------------------------------------------- helpers
+
+function looksLikeUrl(v) {
+  return /^([a-z]+:)?\/\//i.test(v) || v.startsWith('/') || /\.[a-z0-9]{2,5}(\?.*)?$/i.test(v);
+}
+
+function assetUrl(kind, id) { return `/api/asset/${kind}/${id}`; }
+
+// Named slots resolve to stage-percent rects [x, y, w, h]. `rect:` on a
+// frame cue overrides `slot:` entirely.
+const SLOTS = {
+  full: [0, 0, 100, 100],
+  left: [0, 0, 50, 100],
+  right: [50, 0, 50, 100],
+  'third-l': [0, 0, 33.34, 100],
+  'third-c': [33.33, 0, 33.34, 100],
+  'third-r': [66.66, 0, 33.34, 100],
+  'pip-tr': [66, 4, 30, 30],
+  'pip-tl': [4, 4, 30, 30],
+  'pip-br': [66, 66, 30, 30],
+  'pip-bl': [4, 66, 30, 30],
+};
+
+// Layout presets: macros that clear existing frames and create the named ones.
+const LAYOUT_PRESETS = {
+  single: [{ id: 'main', slot: 'full' }],
+  split: [{ id: 'left', slot: 'left' }, { id: 'right', slot: 'right' }],
+  thirds: [
+    { id: 'third-l', slot: 'third-l' },
+    { id: 'third-c', slot: 'third-c' },
+    { id: 'third-r', slot: 'third-r' },
+  ],
+  'pip-tr': [{ id: 'main', slot: 'full' }, { id: 'pip', slot: 'pip-tr' }],
+  'pip-tl': [{ id: 'main', slot: 'full' }, { id: 'pip', slot: 'pip-tl' }],
+  'pip-br': [{ id: 'main', slot: 'full' }, { id: 'pip', slot: 'pip-br' }],
+  'pip-bl': [{ id: 'main', slot: 'full' }, { id: 'pip', slot: 'pip-bl' }],
+};
+
 // ---------------------------------------------------------------- Puppet
+//
+// A Puppet is bound to one frame's DOM subtree
+// (.frame-camera > .frame-pos > .frame-flip) rather than fixed page ids, so
+// several can exist side by side, one per frame.
 
 class Puppet {
-  constructor(stageEl) {
-    this.stage = stageEl;
-    this.pos = document.getElementById('puppet-pos');
-    this.flip = document.getElementById('puppet-flip');
+  constructor(frameEl) {
+    this.stage = frameEl;               // the frame's own rect (for width/camera math)
+    this.camera = frameEl.querySelector('.frame-camera');
+    this.pos = frameEl.querySelector('.frame-pos');
+    this.flip = frameEl.querySelector('.frame-flip');
     this.manifest = null;
+    this.characterName = null;
     this.mouthEls = {};
     this.currentMouth = null;
     this.heldAnims = [];
     this.walkAnim = null;
     this.bobAnim = null;
-    this.x = 50;              // percent of stage width
+    this.x = 50;              // percent of frame width
     this.facing = 1;          // 1 = right, -1 = left
     this.source = null;       // current AudioBufferSourceNode
     this.audioCtx = null;
@@ -22,7 +66,6 @@ class Puppet {
     this.blinkTimer = null;
     this.view = 'body';
     this.cam = { tx: 0, ty: 0, s: 1 };
-    this.camera = document.getElementById('camera');
     this.breathAnim = null;
     this.gazeTimer = null;
   }
@@ -230,7 +273,7 @@ class Puppet {
   // ------------------------------------------------------------- camera
 
   /**
-   * 'body' shows the whole stage; 'face' zooms the camera onto the
+   * 'body' shows the whole frame; 'face' zooms the camera onto the
    * character's face (manifest views.face.focus, default #head).
    */
   setView(mode, instant = false) {
@@ -247,7 +290,7 @@ class Puppet {
     const st = this.stage.getBoundingClientRect();
     const r = el.getBoundingClientRect();
     const c = this.cam;
-    // element rect in untransformed stage coordinates
+    // element rect in untransformed frame coordinates
     const lx = (r.left - st.left - c.tx) / c.s;
     const ly = (r.top - st.top - c.ty) / c.s;
     const lw = r.width / c.s;
@@ -312,18 +355,277 @@ class Puppet {
   }
 }
 
+// ---------------------------------------------------------------- Stage
+//
+// The Stage owns a map of frames (id -> {el, bgEl, contentEl, puppet}),
+// each an independent rectangular sub-stage: background, optional content
+// tile, optional character (a Puppet bound to that frame's DOM). Cues route
+// by cue.frame, defaulting to the active frame (boots as "main", full-size),
+// so with no frame cue ever sent the stage behaves exactly as a single
+// puppet on one full-stage frame.
+
+class Stage {
+  constructor(framesEl, overlaysEl) {
+    this.framesEl = framesEl;
+    this.overlaysEl = overlaysEl;
+    this.frames = new Map();
+    this.activeId = 'main';
+    this.overlays = new Map();
+    this.overlaySeq = 0;
+    this.overlayCache = new Map();
+    this.autoSlots = ['left', 'right'];
+    this.autoIdx = 0;
+  }
+
+  ensureFrame(id) { return this.frames.get(id) || this.createFrame(id); }
+
+  createFrame(id) {
+    const el = document.createElement('div');
+    el.className = 'frame';
+    el.dataset.id = id;
+    el.innerHTML =
+      '<div class="frame-bg"></div>' +
+      '<div class="frame-content"></div>' +
+      '<div class="frame-camera"><div class="frame-pos"><div class="frame-flip"></div></div></div>';
+    this.framesEl.appendChild(el);
+    const f = {
+      id, el,
+      bgEl: el.querySelector('.frame-bg'),
+      contentEl: el.querySelector('.frame-content'),
+      puppet: null,
+    };
+    this.frames.set(id, f);
+    this.setRect(f, 'full');
+    return f;
+  }
+
+  setRect(f, slot, rect) {
+    const r = rect || SLOTS[slot] || SLOTS.full;
+    f.el.style.left = r[0] + '%';
+    f.el.style.top = r[1] + '%';
+    f.el.style.width = r[2] + '%';
+    f.el.style.height = r[3] + '%';
+  }
+
+  autoSlot() {
+    const slot = this.autoSlots[this.autoIdx] || 'full';
+    this.autoIdx = Math.min(this.autoIdx + 1, this.autoSlots.length);
+    return slot;
+  }
+
+  async loadCharacterInto(f, name) {
+    if (!f.puppet) f.puppet = new Puppet(f.el);
+    await f.puppet.load(name);
+  }
+
+  // -------------------------------------------------------- frame cues
+
+  frame(cue) {
+    const existed = this.frames.has(cue.id);
+    const f = this.ensureFrame(cue.id);
+    if (cue.rect) this.setRect(f, null, cue.rect);
+    else if (cue.slot) this.setRect(f, cue.slot);
+    else if (!existed) this.setRect(f, this.autoSlot());
+    if (cue.bg !== undefined) this.setBg(f, cue.bg);
+    if (!cue.character) {
+      if (cue.view && f.puppet) f.puppet.setView(cue.view);
+      if (cue.facing !== undefined && f.puppet) f.puppet.face(cue.facing);
+    }
+    this.activeId = cue.id;
+    return f;
+  }
+
+  frameClear(cue) {
+    if (this.frames.size <= 1) return; // never remove the last frame
+    const f = this.frames.get(cue.id);
+    if (!f) return;
+    if (f.puppet) f.puppet.stopSpeaking();
+    f.el.remove();
+    this.frames.delete(cue.id);
+    if (this.activeId === cue.id) {
+      this.activeId = this.frames.has('main') ? 'main' : this.frames.keys().next().value;
+    }
+  }
+
+  layout(cue) {
+    const preset = cue.preset || 'single';
+    const specs = LAYOUT_PRESETS[preset] || LAYOUT_PRESETS.single;
+    const mainF = this.frames.get('main');
+    const keepChar = mainF && mainF.puppet ? mainF.puppet.characterName : null;
+
+    for (const f of this.frames.values()) { if (f.puppet) f.puppet.stopSpeaking(); f.el.remove(); }
+    this.frames.clear();
+    this.autoIdx = 0;
+
+    let firstId = null;
+    for (const spec of specs) {
+      const f = this.createFrame(spec.id);
+      this.setRect(f, spec.slot);
+      if (!firstId) firstId = spec.id;
+      if (spec.id === 'main' && keepChar) this.loadCharacterInto(f, keepChar);
+    }
+    this.activeId = this.frames.has('main') ? 'main' : firstId;
+  }
+
+  // ------------------------------------------------------------ content
+
+  content(cue) {
+    const id = cue.frame || this.activeId;
+    if (cue.frame) this.activeId = id;
+    this.renderContent(this.ensureFrame(id), cue);
+  }
+
+  contentClear(cue) {
+    const f = this.frames.get(cue.frame || this.activeId);
+    if (f) f.contentEl.innerHTML = '';
+  }
+
+  renderContent(f, cue) {
+    const el = f.contentEl;
+    el.innerHTML = '';
+    if (cue.kind === 'image' || cue.kind === 'video') {
+      const src = looksLikeUrl(cue.value) ? cue.value : assetUrl('props', cue.value);
+      const tag = document.createElement(cue.kind === 'video' ? 'video' : 'img');
+      tag.src = src;
+      tag.style.maxWidth = '100%';
+      tag.style.maxHeight = '100%';
+      tag.style.objectFit = cue.fit || 'contain';
+      if (cue.kind === 'video') { tag.autoplay = true; tag.loop = true; tag.muted = true; tag.playsInline = true; }
+      el.appendChild(tag);
+    } else {
+      const div = document.createElement('div');
+      div.className = 'content-text';
+      div.textContent = cue.value;
+      el.appendChild(div);
+    }
+  }
+
+  // -------------------------------------------------------------- scene
+
+  scene(cue) {
+    const id = cue.frame || this.activeId;
+    if (cue.frame) this.activeId = id;
+    this.setBg(this.ensureFrame(id), cue.bg);
+  }
+
+  setBg(f, bg) {
+    if (bg === undefined) return;
+    f.bgEl.innerHTML = '';
+    if (!bg) { f.bgEl.style.background = ''; return; }
+    if (/^#[0-9a-f]{3,8}$/i.test(bg) || /^(linear|radial)-gradient\(/.test(bg) || looksLikeUrl(bg)) {
+      f.bgEl.style.background = /^(linear|radial)-gradient\(/.test(bg) || bg.startsWith('#')
+        ? bg : `center / cover no-repeat url("${bg}")`;
+      return;
+    }
+    this.loadBgAsset(f, bg); // asset id: resolve against assets/backgrounds/<id>.*
+  }
+
+  async loadBgAsset(f, id) {
+    try {
+      const res = await fetch(assetUrl('backgrounds', id));
+      if (!res.ok) throw new Error('missing asset');
+      const ctype = res.headers.get('content-type') || '';
+      if (ctype.includes('svg')) {
+        f.bgEl.innerHTML = await res.text();
+        f.bgEl.style.background = '';
+      } else {
+        f.bgEl.style.background = `center / cover no-repeat url("${res.url}")`;
+      }
+    } catch { /* asset pack may not have this id yet; leave background as-is */ }
+  }
+
+  // ----------------------------------------------------------- overlays
+
+  overlay(cue) {
+    const id = cue.id || `ov${++this.overlaySeq}`;
+    let ov = this.overlays.get(id);
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.className = 'overlay';
+      this.overlaysEl.appendChild(ov);
+      this.overlays.set(id, ov);
+    }
+    clearTimeout(ov._holdTimer);
+    ov.dataset.enter = cue.enter || '';
+    ov.dataset.exit = cue.exit || '';
+    this.renderOverlay(ov, cue.template, cue.slots || {});
+    requestAnimationFrame(() => ov.classList.add('shown'));
+    if (cue.hold) ov._holdTimer = setTimeout(() => this.overlayClear({ id }), cue.hold);
+  }
+
+  overlayClear(cue) {
+    const removeOne = (id) => {
+      const ov = this.overlays.get(id);
+      if (!ov) return;
+      clearTimeout(ov._holdTimer);
+      this.overlays.delete(id);
+      ov.classList.remove('shown');
+      setTimeout(() => ov.remove(), 400);
+    };
+    if (cue && cue.id) { removeOne(cue.id); return; }
+    for (const id of [...this.overlays.keys()]) removeOne(id);
+  }
+
+  async renderOverlay(ov, template, slots) {
+    let html = this.overlayCache.get(template);
+    if (html === undefined) {
+      try { html = await (await fetch(assetUrl('overlays', template))).text(); }
+      catch { html = ''; }
+      this.overlayCache.set(template, html);
+    }
+    ov.innerHTML = html;
+    for (const [key, val] of Object.entries(slots)) {
+      const el = ov.querySelector(`[data-slot="${key}"]`);
+      if (el) el.textContent = val;
+    }
+  }
+
+  // ----------------------------------------------- character direction
+
+  forFrame(cue) {
+    const id = cue.frame || this.activeId;
+    if (cue.frame) this.activeId = id;
+    return this.ensureFrame(id).puppet;
+  }
+}
+
 // ------------------------------------------------------------- cue bus
 
-const puppet = new Puppet(document.getElementById('stage'));
+const $id = (i) => document.getElementById(i);
+
+const stage = new Stage($id('frames'), $id('overlays'));
+stage.ensureFrame('main'); // boots as one full-size frame + the default character
+
+function mainPuppet() {
+  const f = stage.frames.get('main');
+  return f && f.puppet;
+}
 
 function handleCue(cue) {
   switch (cue.type) {
-    case 'speak': puppet.speak(cue); break;
-    case 'action': puppet.act(cue.name); break;
-    case 'walk': puppet.walkTo(cue.x, cue.jump || cue.from); break;
-    case 'look': puppet.look(cue.dir); break;
-    case 'view': puppet.setView(cue.mode); break;
-    case 'character': loadCharacter(cue.name); break;
+    case 'frame': {
+      const f = stage.frame(cue);
+      if (cue.character) loadCharacter(cue.character, f.id, { view: cue.view, facing: cue.facing });
+      break;
+    }
+    case 'frame-clear': stage.frameClear(cue); break;
+    case 'layout': stage.layout(cue); break;
+    case 'content': stage.content(cue); break;
+    case 'content-clear': stage.contentClear(cue); break;
+    case 'scene': stage.scene(cue); break;
+    case 'overlay': stage.overlay(cue); break;
+    case 'overlay-clear': stage.overlayClear(cue); break;
+    case 'speak': { const p = stage.forFrame(cue); if (p) p.speak(cue); break; }
+    case 'action': { const p = stage.forFrame(cue); if (p) p.act(cue.name); break; }
+    case 'walk': { const p = stage.forFrame(cue); if (p) p.walkTo(cue.x, cue.jump || cue.from); break; }
+    case 'look': { const p = stage.forFrame(cue); if (p) p.look(cue.dir); break; }
+    case 'view': { const p = stage.forFrame(cue); if (p) p.setView(cue.mode); break; }
+    case 'character': {
+      const id = cue.frame || stage.activeId;
+      if (cue.frame) stage.activeId = id;
+      loadCharacter(cue.name, id);
+      break;
+    }
     case 'script-start': prompterStart(cue.lines); break;
     case 'script-line': prompterHighlight(cue.index); break;
     case 'script-end': prompterEnd(); break;
@@ -334,24 +636,29 @@ function handleCue(cue) {
 const events = new EventSource('/api/events');
 events.onmessage = (e) => handleCue(JSON.parse(e.data));
 
-// Any user gesture unlocks/keeps-alive the audio context, so speech cues
-// arriving later over SSE are allowed to make sound (Safari autoplay policy).
-// Safari additionally keeps a context inaudible until a source node is
-// *started* inside a real gesture, so play one silent sample too.
-let audioUnlocked = false;
+// Any user gesture unlocks/keeps-alive every puppet's audio context, so
+// speech cues arriving later over SSE are allowed to make sound (Safari
+// autoplay policy). Safari additionally keeps a context inaudible until a
+// source node is *started* inside a real gesture, so play one silent sample
+// per context too.
+const unlockedCtxs = new WeakSet();
+function unlockAudio(p) {
+  if (!p) return;
+  const ctx = p.ensureCtx();
+  if (ctx.state !== 'running') ctx.resume().catch(() => {});
+  if (!unlockedCtxs.has(ctx)) {
+    try {
+      const src = ctx.createBufferSource();
+      src.buffer = ctx.createBuffer(1, 1, 22050);
+      src.connect(ctx.destination);
+      src.start(0);
+      unlockedCtxs.add(ctx);
+    } catch { /* retry on next gesture */ }
+  }
+}
 for (const ev of ['pointerdown', 'keydown']) {
   window.addEventListener(ev, () => {
-    const ctx = puppet.ensureCtx();
-    if (ctx.state !== 'running') ctx.resume().catch(() => {});
-    if (!audioUnlocked) {
-      try {
-        const src = ctx.createBufferSource();
-        src.buffer = ctx.createBuffer(1, 1, 22050);
-        src.connect(ctx.destination);
-        src.start(0);
-        audioUnlocked = true;
-      } catch { /* retry on next gesture */ }
-    }
+    for (const f of stage.frames.values()) if (f.puppet) unlockAudio(f.puppet);
   }, true);
 }
 
@@ -388,6 +695,10 @@ function toast(msg) {
 }
 
 // ------------------------------------------------------------- controls
+//
+// The control panel always targets the "main" frame explicitly, exactly as
+// the single-puppet stage did before frames existed — it has no frame
+// picker, regardless of whatever frame a screenplay may have made active.
 
 async function post(url, body) {
   const r = await fetch(url, {
@@ -398,8 +709,6 @@ async function post(url, body) {
   if (!r.ok) toast((await r.json()).error || 'request failed');
 }
 
-const $id = (i) => document.getElementById(i);
-
 $id('say-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const text = $id('say-text').value.trim();
@@ -408,6 +717,7 @@ $id('say-form').addEventListener('submit', (e) => {
     text,
     engine: $id('engine').value,
     voice: $id('voice').value,
+    frame: 'main',
   });
 });
 
@@ -415,7 +725,7 @@ $id('engine').addEventListener('change', loadVoices);
 
 // audio diagnostics: state readout + a beep through the same output path
 $id('beep').onclick = async () => {
-  const ctx = puppet.ensureCtx();
+  const ctx = mainPuppet().ensureCtx();
   await ctx.resume().catch(() => {});
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
@@ -427,7 +737,8 @@ $id('beep').onclick = async () => {
   osc.stop(ctx.currentTime + 0.4);
 };
 setInterval(() => {
-  const c = puppet.audioCtx;
+  const p = mainPuppet();
+  const c = p && p.audioCtx;
   $id('audio-state').textContent = 'audio: ' + (c ? c.state : 'not started yet');
 }, 500);
 
@@ -448,39 +759,45 @@ async function loadVoices() {
 function buildActionButtons() {
   const box = $id('actions');
   box.innerHTML = '';
-  for (const name of Object.keys(puppet.manifest.actions || {})) {
+  const p = mainPuppet();
+  for (const name of Object.keys((p.manifest || {}).actions || {})) {
     const b = document.createElement('button');
     b.textContent = name;
-    b.onclick = () => post('/api/cue', { type: 'action', name });
+    b.onclick = () => post('/api/cue', { type: 'action', name, frame: 'main' });
     box.appendChild(b);
   }
   for (const dir of ['left', 'front', 'right']) {
     const b = document.createElement('button');
     b.textContent = `look ${dir}`;
-    b.onclick = () => post('/api/cue', { type: 'look', dir });
+    b.onclick = () => post('/api/cue', { type: 'look', dir, frame: 'main' });
     box.appendChild(b);
   }
   for (const mode of ['face', 'body']) {
     const b = document.createElement('button');
     b.textContent = `🎥 ${mode}`;
-    b.onclick = () => post('/api/cue', { type: 'view', mode });
+    b.onclick = () => post('/api/cue', { type: 'view', mode, frame: 'main' });
     box.appendChild(b);
   }
 }
 
 $id('walk').addEventListener('change', (e) => {
-  post('/api/cue', { type: 'walk', x: parseInt(e.target.value, 10) });
+  post('/api/cue', { type: 'walk', x: parseInt(e.target.value, 10), frame: 'main' });
 });
 
 $id('run-script').onclick = () => post('/api/script', { script: $id('script').value });
 $id('stop-script').onclick = () => post('/api/script/stop', {});
 
-async function loadCharacter(name) {
-  await puppet.load(name);
+async function loadCharacter(name, frameId = 'main', extra = {}) {
+  const f = stage.ensureFrame(frameId);
+  await stage.loadCharacterInto(f, name);
+  if (extra.view) f.puppet.setView(extra.view, true);
+  if (extra.facing !== undefined) f.puppet.face(extra.facing);
+  if (frameId !== 'main') return;
+
   buildActionButtons();
   const sel = $id('character');
   if (sel.value !== name) sel.value = name;
-  const pref = puppet.manifest.voice;
+  const pref = f.puppet.manifest.voice;
   if (pref) {
     if (pref.engine) $id('engine').value = pref.engine;
     await loadVoices();
@@ -489,7 +806,7 @@ async function loadCharacter(name) {
 }
 
 $id('character').addEventListener('change', (e) => {
-  post('/api/cue', { type: 'character', name: e.target.value });
+  post('/api/cue', { type: 'character', name: e.target.value, frame: 'main' });
 });
 
 // ---------------------------------------------------------------- boot
@@ -502,8 +819,8 @@ $id('character').addEventListener('change', (e) => {
     o.value = o.textContent = c;
     sel.appendChild(o);
   }
-  await loadCharacter(characters[0]);
-  if (!puppet.manifest.voice) loadVoices();
+  await loadCharacter(characters[0], 'main');
+  if (!mainPuppet().manifest.voice) loadVoices();
   $id('script').value = [
     '# Screenplay: [direction] lines and spoken lines',
     '[enter from left]',

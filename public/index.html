@@ -16,25 +16,51 @@
 
   #stage {
     position: relative; flex: 1; overflow: hidden;
+    background: #1a1e2e;
+  }
+
+  /* ---- frames: independent rectangular sub-stages, positioned by % rect */
+  #frames { position: absolute; inset: 0; }
+  .frame { position: absolute; overflow: hidden; }
+  .frame-bg {
+    position: absolute; inset: 0;
     background: linear-gradient(#2b3350 0%, #3d4670 62%, #23283c 62%, #1a1e2e 100%);
   }
-  #camera {
+  .frame-content {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+  }
+  .content-text {
+    font-size: 28px; font-weight: 700; color: #fff;
+    text-shadow: 0 2px 6px rgba(0,0,0,.6); padding: 12px 20px;
+  }
+  .frame-camera {
     position: absolute; inset: 0;
     transform-origin: 0 0;
     transition: transform .9s cubic-bezier(.22,.61,.36,1);
   }
-  #puppet-pos {
+  .frame-pos {
     position: absolute; bottom: 9%; left: 50%;
     transform: translateX(-50%);
   }
-  #puppet-flip { transform-origin: 50% 100%; }
-  #puppet-flip svg { display: block; filter: drop-shadow(0 14px 10px rgba(0,0,0,.35)); }
+  .frame-flip { transform-origin: 50% 100%; }
+  .frame-flip svg { display: block; filter: drop-shadow(0 14px 10px rgba(0,0,0,.35)); }
+
+  /* ---- overlays: above all frames, spans the whole broadcast */
+  #overlays { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+  .overlay {
+    position: absolute; inset: 0; opacity: 0;
+    transition: opacity .4s ease;
+  }
+  .overlay.shown { opacity: 1; }
+  .overlay svg, .overlay img { width: 100%; height: 100%; display: block; }
 
   #prompter {
     position: absolute; left: 12px; top: 12px; width: 300px; max-height: 45%;
     overflow-y: auto; padding: 10px 12px; border-radius: 10px;
     background: rgba(10,12,18,.78); font-size: 13px; line-height: 1.9;
-    display: none; backdrop-filter: blur(4px);
+    display: none; backdrop-filter: blur(4px); z-index: 10;
   }
   #prompter.active { display: block; }
   .p-line { opacity: .45; transition: opacity .2s; white-space: pre-wrap; }
@@ -44,6 +70,7 @@
     position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
     background: #b33; color: #fff; padding: 8px 16px; border-radius: 8px;
     opacity: 0; transition: opacity .3s; pointer-events: none; font-size: 13px;
+    z-index: 10;
   }
   #toast.show { opacity: 1; }
 
@@ -74,9 +101,8 @@
 <body>
   <main>
     <div id="stage">
-      <div id="camera">
-        <div id="puppet-pos"><div id="puppet-flip"></div></div>
-      </div>
+      <div id="frames"></div>
+      <div id="overlays"></div>
       <div id="prompter"></div>
       <div id="toast"></div>
     </div>

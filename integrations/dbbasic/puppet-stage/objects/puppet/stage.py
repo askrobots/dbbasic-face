@@ -22,25 +22,51 @@ _HTML = r'''<!doctype html>
 
   #stage {
     position: relative; flex: 1; overflow: hidden;
+    background: #1a1e2e;
+  }
+
+  /* ---- frames: independent rectangular sub-stages, positioned by % rect */
+  #frames { position: absolute; inset: 0; }
+  .frame { position: absolute; overflow: hidden; }
+  .frame-bg {
+    position: absolute; inset: 0;
     background: linear-gradient(#2b3350 0%, #3d4670 62%, #23283c 62%, #1a1e2e 100%);
   }
-  #camera {
+  .frame-content {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+  }
+  .content-text {
+    font-size: 28px; font-weight: 700; color: #fff;
+    text-shadow: 0 2px 6px rgba(0,0,0,.6); padding: 12px 20px;
+  }
+  .frame-camera {
     position: absolute; inset: 0;
     transform-origin: 0 0;
     transition: transform .9s cubic-bezier(.22,.61,.36,1);
   }
-  #puppet-pos {
+  .frame-pos {
     position: absolute; bottom: 9%; left: 50%;
     transform: translateX(-50%);
   }
-  #puppet-flip { transform-origin: 50% 100%; }
-  #puppet-flip svg { display: block; filter: drop-shadow(0 14px 10px rgba(0,0,0,.35)); }
+  .frame-flip { transform-origin: 50% 100%; }
+  .frame-flip svg { display: block; filter: drop-shadow(0 14px 10px rgba(0,0,0,.35)); }
+
+  /* ---- overlays: above all frames, spans the whole broadcast */
+  #overlays { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+  .overlay {
+    position: absolute; inset: 0; opacity: 0;
+    transition: opacity .4s ease;
+  }
+  .overlay.shown { opacity: 1; }
+  .overlay svg, .overlay img { width: 100%; height: 100%; display: block; }
 
   #prompter {
     position: absolute; left: 12px; top: 12px; width: 300px; max-height: 45%;
     overflow-y: auto; padding: 10px 12px; border-radius: 10px;
     background: rgba(10,12,18,.78); font-size: 13px; line-height: 1.9;
-    display: none; backdrop-filter: blur(4px);
+    display: none; backdrop-filter: blur(4px); z-index: 10;
   }
   #prompter.active { display: block; }
   .p-line { opacity: .45; transition: opacity .2s; white-space: pre-wrap; }
@@ -50,6 +76,7 @@ _HTML = r'''<!doctype html>
     position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
     background: #b33; color: #fff; padding: 8px 16px; border-radius: 8px;
     opacity: 0; transition: opacity .3s; pointer-events: none; font-size: 13px;
+    z-index: 10;
   }
   #toast.show { opacity: 1; }
 
@@ -80,9 +107,8 @@ _HTML = r'''<!doctype html>
 <body>
 <main>
     <div id="stage">
-      <div id="camera">
-        <div id="puppet-pos"><div id="puppet-flip"></div></div>
-      </div>
+      <div id="frames"></div>
+      <div id="overlays"></div>
       <div id="prompter"></div>
       <div id="toast"></div>
     </div>
@@ -133,7 +159,7 @@ _HTML = r'''<!doctype html>
       </div>
     </section>
   </aside>
-<script>window.PUPPET_CHARACTERS = {"ava": {"manifest": {"name": "Ava", "svg": "puppet.svg", "height": 600, "voice": {"engine": "say", "voice": "Samantha"}, "mouths": {"A": "#mouth-A", "B": "#mouth-B", "C": "#mouth-C", "D": "#mouth-D", "E": "#mouth-E", "F": "#mouth-F", "G": "#mouth-G", "H": "#mouth-H", "X": "#mouth-X"}, "restMouth": "X", "blink": {"target": "#eyes"}, "look": {"target": ".iris", "dx": 3, "dy": 1.5}, "walk": {"speed": 190, "bob": true}, "views": {"face": {"focus": "#head", "fill": 0.62, "centerY": 0.48}}, "idle": {"breathe": {"target": "#torso", "amount": 1.4, "period": 4200}, "gaze": true}, "actions": {"wave": {"tracks": [{"target": "#arm-right", "duration": 1800, "keyframes": [{"transform": "rotate(0deg)"}, {"transform": "rotate(-140deg)", "offset": 0.3}, {"transform": "rotate(-120deg)", "offset": 0.45}, {"transform": "rotate(-140deg)", "offset": 0.6}, {"transform": "rotate(-120deg)", "offset": 0.72}, {"transform": "rotate(0deg)"}]}]}, "nod": {"tracks": [{"target": "#head", "duration": 1200, "keyframes": [{"transform": "translateY(0)"}, {"transform": "translateY(6px) rotate(2deg)", "offset": 0.25}, {"transform": "translateY(0)", "offset": 0.5}, {"transform": "translateY(6px) rotate(2deg)", "offset": 0.75}, {"transform": "translateY(0)"}]}]}, "shake": {"tracks": [{"target": "#head", "duration": 1200, "keyframes": [{"transform": "translateX(0)"}, {"transform": "translateX(-6px) rotate(-2deg)", "offset": 0.2}, {"transform": "translateX(6px) rotate(2deg)", "offset": 0.45}, {"transform": "translateX(-6px) rotate(-2deg)", "offset": 0.7}, {"transform": "translateX(0)"}]}]}, "shrug": {"tracks": [{"target": "#arm-left", "duration": 1100, "keyframes": [{"transform": "translateY(0) rotate(0deg)"}, {"transform": "translateY(-7px) rotate(9deg)", "offset": 0.35}, {"transform": "translateY(-7px) rotate(9deg)", "offset": 0.65}, {"transform": "translateY(0) rotate(0deg)"}]}, {"target": "#arm-right", "duration": 1100, "keyframes": [{"transform": "translateY(0) rotate(0deg)"}, {"transform": "translateY(-7px) rotate(-9deg)", "offset": 0.35}, {"transform": "translateY(-7px) rotate(-9deg)", "offset": 0.65}, {"transform": "translateY(0) rotate(0deg)"}]}, {"target": "#head", "duration": 1100, "keyframes": [{"transform": "rotate(0deg)"}, {"transform": "rotate(-4deg)", "offset": 0.35}, {"transform": "rotate(-4deg)", "offset": 0.65}, {"transform": "rotate(0deg)"}]}]}, "bow": {"tracks": [{"target": "#puppet", "duration": 1800, "easing": "ease-in-out", "keyframes": [{"transform": "rotate(0deg)"}, {"transform": "rotate(14deg)", "offset": 0.35}, {"transform": "rotate(14deg)", "offset": 0.65}, {"transform": "rotate(0deg)"}]}]}, "happy": {"hold": true, "tracks": [{"target": "#brow-left", "duration": 350, "fill": "forwards", "keyframes": [{"transform": "translateY(0)"}, {"transform": "translateY(-2px)"}]}, {"target": "#brow-right", "duration": 350, "fill": "forwards", "keyframes": [{"transform": "translateY(0)"}, {"transform": "translateY(-2px)"}]}, {"target": "#cheek-left", "duration": 350, "fill": "forwards", "keyframes": [{"opacity": 0.3}, {"opacity": 0.55}]}, {"target": "#cheek-right", "duration": 350, "fill": "forwards", "keyframes": [{"opacity": 0.3}, {"opacity": 0.55}]}, {"target": "#eyes", "duration": 350, "fill": "forwards", "keyframes": [{"transform": "scaleY(1)"}, {"transform": "scaleY(0.88)"}]}]}, "sad": {"hold": true, "tracks": [{"target": "#brow-left", "duration": 350, "fill": "forwards", "keyframes": [{"transform": "rotate(0deg) translateY(0)"}, {"transform": "rotate(10deg) translateY(2px)"}]}, {"target": "#brow-right", "duration": 350, "fill": "forwards", "keyframes": [{"transform": "rotate(0deg) translateY(0)"}, {"transform": "rotate(-10deg) translateY(2px)"}]}, {"target": "#head", "duration": 350, "fill": "forwards", "keyframes": [{"transform": "translateY(0) rotate(0deg)"}, {"transform": "translateY(4px) rotate(-2deg)"}]}]}, "surprised": {"hold": true, "tracks": [{"target": "#brow-left", "duration": 280, "fill": "forwards", "keyframes": [{"transform": "translateY(0)"}, {"transform": "translateY(-4px)"}]}, {"target": "#brow-right", "duration": 280, "fill": "forwards", "keyframes": [{"transform": "translateY(0)"}, {"transform": "translateY(-4px)"}]}, {"target": "#eyes", "duration": 280, "fill": "forwards", "keyframes": [{"transform": "scale(1)"}, {"transform": "scale(1.18)"}]}]}, "neutral": {"reset": true, "tracks": []}}}, "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 220 560\">\n  <defs>\n    <clipPath id=\"ava-eye-left\"><path d=\"M80,64 Q88,56.5 96.5,63 Q88,71.5 80,64 Z\"/></clipPath>\n    <clipPath id=\"ava-eye-right\"><path d=\"M123.5,63 Q132,56.5 140,64 Q132,71.5 123.5,63 Z\"/></clipPath>\n  </defs>\n  <g id=\"puppet\" style=\"transform-box:fill-box;transform-origin:50% 100%\">\n\n    <g id=\"legs\">\n      <path d=\"M72,246 Q110,258 148,246 L150,302 Q110,314 70,302 Z\" fill=\"#3d5578\"/>\n      <path id=\"leg-left\" d=\"M78,300 C76,360 80,420 84,470 L84,528 L106,528 L104,470 C106,420 106,360 108,305 Z\" fill=\"#46608a\"/>\n      <path id=\"leg-right\" d=\"M112,305 C114,360 114,420 116,470 L114,528 L136,528 L136,470 C140,420 144,360 142,300 Z\" fill=\"#46608a\"/>\n      <ellipse cx=\"94\" cy=\"534\" rx=\"17\" ry=\"8\" fill=\"#6b4450\"/>\n      <ellipse cx=\"126\" cy=\"534\" rx=\"17\" ry=\"8\" fill=\"#6b4450\"/>\n    </g>\n\n    <g id=\"arm-left\" style=\"transform-box:fill-box;transform-origin:50% 5%\">\n      <path d=\"M68,175 C62,205 64,245 70,285\" stroke=\"#eab88f\" stroke-width=\"10\" fill=\"none\" stroke-linecap=\"round\"/>\n      <ellipse cx=\"71\" cy=\"292\" rx=\"5.5\" ry=\"8\" fill=\"#eab88f\"/>\n      <path d=\"M74,146 C64,150 58,160 60,178 C66,182 74,180 78,176 C78,164 78,154 74,146 Z\" fill=\"#ad7280\"/>\n    </g>\n    <g id=\"arm-right\" style=\"transform-box:fill-box;transform-origin:50% 5%\">\n      <path d=\"M152,175 C158,205 156,245 150,285\" stroke=\"#eab88f\" stroke-width=\"10\" fill=\"none\" stroke-linecap=\"round\"/>\n      <ellipse cx=\"149\" cy=\"292\" rx=\"5.5\" ry=\"8\" fill=\"#eab88f\"/>\n      <path d=\"M146,146 C156,150 162,160 160,178 C154,182 146,180 142,176 C142,164 142,154 146,146 Z\" fill=\"#ad7280\"/>\n    </g>\n\n    <g id=\"torso\">\n      <path d=\"M64,152 C70,140 90,131 110,131 C130,131 150,140 156,152 C159,178 158,205 154,232 C152,246 140,252 110,252 C80,252 68,246 66,232 C62,205 61,178 64,152 Z\" fill=\"#c2848f\"/>\n      <path d=\"M92,131 Q110,144 128,131 Q120,138 110,138 Q100,138 92,131 Z\" fill=\"#ab6f7c\"/>\n    </g>\n\n    <g id=\"hair-back\">\n      <path d=\"M110,16 C66,18 52,54 56,100 C58,148 52,186 62,210 C76,222 96,222 100,214 C92,170 92,130 94,100 L126,100 C128,130 128,170 120,214 C124,222 144,222 158,210 C168,186 162,148 164,100 C168,54 154,18 110,16 Z\" fill=\"#3b2a1f\"/>\n    </g>\n\n    <g id=\"neck\">\n      <path d=\"M100,98 L100,132 Q110,141 120,132 L120,98 Z\" fill=\"#eab88f\"/>\n      <path d=\"M100,102 Q110,111 120,102 L120,107 Q110,115 100,107 Z\" fill=\"#d49c72\" opacity=\"0.35\"/>\n    </g>\n\n    <g id=\"head\" style=\"transform-box:fill-box;transform-origin:50% 88%\">\n      <path d=\"M110,26 C90,26 78,44 79,66 C80,88 92,104 110,109 C128,104 140,88 141,66 C142,44 130,26 110,26 Z\" fill=\"#f0c29c\"/>\n      <path d=\"M132,84 C128,96 120,104 112,107\" stroke=\"#d8a279\" stroke-width=\"1.5\" fill=\"none\" opacity=\"0.3\"/>\n\n      <ellipse id=\"cheek-left\" cx=\"88\" cy=\"81\" rx=\"6.5\" ry=\"3.6\" fill=\"#e78f83\" opacity=\"0.22\"/>\n      <ellipse id=\"cheek-right\" cx=\"132\" cy=\"81\" rx=\"6.5\" ry=\"3.6\" fill=\"#e78f83\" opacity=\"0.22\"/>\n\n      <g id=\"brows\">\n        <path id=\"brow-left\" style=\"transform-box:fill-box;transform-origin:50% 50%\"\n              d=\"M80,53.5 Q88,49.5 96,52\" stroke=\"#33241a\" stroke-width=\"2.6\" fill=\"none\" stroke-linecap=\"round\"/>\n        <path id=\"brow-right\" style=\"transform-box:fill-box;transform-origin:50% 50%\"\n              d=\"M124,52 Q132,49.5 140,53.5\" stroke=\"#33241a\" stroke-width=\"2.6\" fill=\"none\" stroke-linecap=\"round\"/>\n      </g>\n\n      <g id=\"eyes\" style=\"transform-box:fill-box;transform-origin:50% 50%\">\n        <path d=\"M80,64 Q88,56.5 96.5,63 Q88,71.5 80,64 Z\" fill=\"#fdfbf7\"/>\n        <path d=\"M123.5,63 Q132,56.5 140,64 Q132,71.5 123.5,63 Z\" fill=\"#fdfbf7\"/>\n        <g clip-path=\"url(#ava-eye-left)\">\n          <g class=\"iris\">\n            <circle cx=\"88\" cy=\"64.5\" r=\"4.4\" fill=\"#7a5230\"/>\n            <circle cx=\"88\" cy=\"64.5\" r=\"2\" fill=\"#1e1410\"/>\n            <circle cx=\"86.7\" cy=\"63.2\" r=\"1\" fill=\"#fff\"/>\n          </g>\n        </g>\n        <g clip-path=\"url(#ava-eye-right)\">\n          <g class=\"iris\">\n            <circle cx=\"132\" cy=\"64.5\" r=\"4.4\" fill=\"#7a5230\"/>\n            <circle cx=\"132\" cy=\"64.5\" r=\"2\" fill=\"#1e1410\"/>\n            <circle cx=\"130.7\" cy=\"63.2\" r=\"1\" fill=\"#fff\"/>\n          </g>\n        </g>\n        <path d=\"M80,63.8 Q88,57 96.5,63\" stroke=\"#241a12\" stroke-width=\"1.6\" fill=\"none\" stroke-linecap=\"round\"/>\n        <path d=\"M123.5,63 Q132,57 140,63.8\" stroke=\"#241a12\" stroke-width=\"1.6\" fill=\"none\" stroke-linecap=\"round\"/>\n      </g>\n\n      <g id=\"nose\">\n        <path d=\"M106.5,68 Q105,78 102.5,85.5\" stroke=\"#d8a279\" stroke-width=\"1.4\" fill=\"none\" opacity=\"0.45\"/>\n        <path d=\"M102.5,86.5 Q106,89.5 110.5,87.5\" stroke=\"#c98f66\" stroke-width=\"1.4\" fill=\"none\" stroke-linecap=\"round\" opacity=\"0.8\"/>\n      </g>\n\n      <!-- Rhubarb visemes as realistic lip shapes; one visible at a time -->\n      <g id=\"mouths\">\n        <g id=\"mouth-X\">\n          <path d=\"M98,95.6 C103,92.6 107,93.4 110,94.8 C113,93.4 117,92.6 122,95.6 C117,97 113,97.4 110,97.4 C107,97.4 103,97 98,95.6 Z\" fill=\"#c06b74\"/>\n          <path d=\"M99,96 Q110,102.6 121,96 Q110,98.8 99,96 Z\" fill=\"#d67f88\"/>\n        </g>\n        <g id=\"mouth-A\">\n          <path d=\"M97,95.6 Q110,92.8 123,95.6 Q110,97.2 97,95.6 Z\" fill=\"#c06b74\"/>\n          <path d=\"M98,96 Q110,100.6 122,96 Q110,97.6 98,96 Z\" fill=\"#d67f88\"/>\n        </g>\n        <g id=\"mouth-B\">\n          <path d=\"M99,94.5 Q110,92 121,94.5 Q121,100.5 110,101.5 Q99,100.5 99,94.5 Z\" fill=\"#5a2a30\"/>\n          <rect x=\"102\" y=\"94.6\" width=\"16\" height=\"3\" rx=\"1.2\" fill=\"#fbf6f0\"/>\n          <path d=\"M99,94.5 Q110,91.8 121,94.5\" stroke=\"#c06b74\" stroke-width=\"1.6\" fill=\"none\" stroke-linecap=\"round\"/>\n          <path d=\"M99,94.8 Q110,102.5 121,94.8\" stroke=\"#d67f88\" stroke-width=\"1.6\" fill=\"none\" stroke-linecap=\"round\"/>\n        </g>\n        <g id=\"mouth-C\">\n          <path d=\"M100,93 Q110,90.5 120,93 Q122,101 110,104 Q98,101 100,93 Z\" fill=\"#5a2a30\"/>\n          <rect x=\"102\" y=\"93.4\" width=\"16\" height=\"3.4\" rx=\"1.4\" fill=\"#fbf6f0\"/>\n          <path d=\"M100,93 Q110,90.2 120,93 Q122,101.5 110,104.5 Q98,101.5 100,93 Z\" stroke=\"#c06b74\" stroke-width=\"1.6\" fill=\"none\"/>\n        </g>\n        <g id=\"mouth-D\">\n          <path d=\"M97,92 Q110,89 123,92 Q126,103 110,108 Q94,103 97,92 Z\" fill=\"#5a2a30\"/>\n          <rect x=\"100\" y=\"92.6\" width=\"20\" height=\"3.6\" rx=\"1.5\" fill=\"#fbf6f0\"/>\n          <ellipse cx=\"110\" cy=\"103.5\" rx=\"8\" ry=\"3.5\" fill=\"#c46a72\"/>\n          <path d=\"M97,92 Q110,88.6 123,92 Q126,103.5 110,108.5 Q94,103.5 97,92 Z\" stroke=\"#c06b74\" stroke-width=\"1.6\" fill=\"none\"/>\n        </g>\n        <g id=\"mouth-E\">\n          <ellipse cx=\"110\" cy=\"97.5\" rx=\"7.5\" ry=\"5.5\" fill=\"#5a2a30\"/>\n          <ellipse cx=\"110\" cy=\"97.5\" rx=\"7.5\" ry=\"5.5\" stroke=\"#c06b74\" stroke-width=\"1.8\" fill=\"none\"/>\n        </g>\n        <g id=\"mouth-F\">\n          <ellipse cx=\"110\" cy=\"97\" rx=\"4.6\" ry=\"5.6\" fill=\"#5a2a30\"/>\n          <ellipse cx=\"110\" cy=\"97\" rx=\"5.4\" ry=\"6.4\" stroke=\"#d67f88\" stroke-width=\"2.6\" fill=\"none\"/>\n        </g>\n        <g id=\"mouth-G\">\n          <rect x=\"103\" y=\"94\" width=\"14\" height=\"3.4\" rx=\"1.4\" fill=\"#fbf6f0\" stroke=\"#8a4a52\" stroke-width=\"0.8\"/>\n          <path d=\"M100,99 Q110,102.5 120,99\" stroke=\"#d67f88\" stroke-width=\"2.6\" fill=\"none\" stroke-linecap=\"round\"/>\n        </g>\n        <g id=\"mouth-H\">\n          <path d=\"M100,93.5 Q110,91 120,93.5 Q122,102 110,104.5 Q98,102 100,93.5 Z\" fill=\"#5a2a30\"/>\n          <ellipse cx=\"110\" cy=\"95.4\" rx=\"5.5\" ry=\"2.6\" fill=\"#c46a72\"/>\n          <path d=\"M100,93.5 Q110,90.7 120,93.5 Q122,102.5 110,105 Q98,102.5 100,93.5 Z\" stroke=\"#c06b74\" stroke-width=\"1.6\" fill=\"none\"/>\n        </g>\n      </g>\n\n      <g id=\"hair-front\">\n        <path d=\"M79,64 C78,40 92,24 110,24 C128,24 142,40 141,64 C141,70 140,76 139,80 C138,58 128,44 110,44 C92,44 82,58 81,80 C80,76 79,70 79,64 Z\" fill=\"#3b2a1f\"/>\n        <path d=\"M110,25 C109,31 109,37 110,43\" stroke=\"#2c1f16\" stroke-width=\"1.2\" fill=\"none\" opacity=\"0.6\"/>\n      </g>\n    </g>\n  </g>\n</svg>\n"}, "pip": {"manifest": {"name": "Pip", "svg": "puppet.svg", "height": 300, "mouths": {"A": "#mouth-A", "B": "#mouth-B", "C": "#mouth-C", "D": "#mouth-D", "E": "#mouth-E", "F": "#mouth-F", "G": "#mouth-G", "H": "#mouth-H", "X": "#mouth-X"}, "restMouth": "X", "blink": {"target": "#eyes"}, "look": {"target": "#pupils", "dx": 5, "dy": 2}, "walk": {"speed": 230, "bob": true}, "actions": {"wave": {"tracks": [{"target": "#arm-right", "duration": 1600, "keyframes": [{"transform": "rotate(0deg)"}, {"transform": "rotate(-165deg)", "offset": 0.25}, {"transform": "rotate(-135deg)", "offset": 0.4}, {"transform": "rotate(-165deg)", "offset": 0.55}, {"transform": "rotate(-135deg)", "offset": 0.7}, {"transform": "rotate(0deg)"}]}]}, "jump": {"tracks": [{"target": "#puppet", "duration": 900, "easing": "ease-in-out", "keyframes": [{"transform": "translateY(0) scale(1,1)"}, {"transform": "translateY(5px) scale(1.08,0.88)", "offset": 0.2}, {"transform": "translateY(-52px) scale(0.95,1.08)", "offset": 0.5}, {"transform": "translateY(0) scale(1,1)", "offset": 0.8}, {"transform": "translateY(2px) scale(1.05,0.93)", "offset": 0.9}, {"transform": "translateY(0) scale(1,1)"}]}]}, "nod": {"tracks": [{"target": "#head", "duration": 1100, "keyframes": [{"transform": "translateY(0)"}, {"transform": "translateY(9px)", "offset": 0.25}, {"transform": "translateY(0)", "offset": 0.5}, {"transform": "translateY(9px)", "offset": 0.75}, {"transform": "translateY(0)"}]}]}, "shake": {"tracks": [{"target": "#head", "duration": 1100, "keyframes": [{"transform": "translateX(0)"}, {"transform": "translateX(-9px)", "offset": 0.2}, {"transform": "translateX(9px)", "offset": 0.45}, {"transform": "translateX(-9px)", "offset": 0.7}, {"transform": "translateX(0)"}]}]}, "bow": {"tracks": [{"target": "#puppet", "duration": 1800, "easing": "ease-in-out", "keyframes": [{"transform": "rotate(0deg)"}, {"transform": "rotate(24deg)", "offset": 0.35}, {"transform": "rotate(24deg)", "offset": 0.65}, {"transform": "rotate(0deg)"}]}]}, "dance": {"tracks": [{"target": "#puppet", "duration": 2400, "keyframes": [{"transform": "translateX(0) rotate(0deg)"}, {"transform": "translateX(-12px) rotate(-6deg)", "offset": 0.25}, {"transform": "translateX(12px) rotate(6deg)", "offset": 0.5}, {"transform": "translateX(-12px) rotate(-6deg)", "offset": 0.75}, {"transform": "translateX(0) rotate(0deg)"}]}, {"target": "#arm-right", "duration": 1200, "iterations": 2, "keyframes": [{"transform": "rotate(0deg)"}, {"transform": "rotate(-150deg)", "offset": 0.5}, {"transform": "rotate(0deg)"}]}, {"target": "#arm-left", "duration": 1200, "iterations": 2, "keyframes": [{"transform": "rotate(-150deg)"}, {"transform": "rotate(0deg)", "offset": 0.5}, {"transform": "rotate(-150deg)"}]}]}, "happy": {"hold": true, "tracks": [{"target": "#brow-left", "duration": 300, "fill": "forwards", "keyframes": [{"transform": "translateY(0)"}, {"transform": "translateY(-5px)"}]}, {"target": "#brow-right", "duration": 300, "fill": "forwards", "keyframes": [{"transform": "translateY(0)"}, {"transform": "translateY(-5px)"}]}, {"target": "#cheek-left", "duration": 300, "fill": "forwards", "keyframes": [{"opacity": 0.45}, {"opacity": 0.9}]}, {"target": "#cheek-right", "duration": 300, "fill": "forwards", "keyframes": [{"opacity": 0.45}, {"opacity": 0.9}]}]}, "sad": {"hold": true, "tracks": [{"target": "#brow-left", "duration": 300, "fill": "forwards", "keyframes": [{"transform": "rotate(0deg) translateY(0)"}, {"transform": "rotate(14deg) translateY(3px)"}]}, {"target": "#brow-right", "duration": 300, "fill": "forwards", "keyframes": [{"transform": "rotate(0deg) translateY(0)"}, {"transform": "rotate(-14deg) translateY(3px)"}]}, {"target": "#head", "duration": 300, "fill": "forwards", "keyframes": [{"transform": "translateY(0)"}, {"transform": "translateY(6px)"}]}]}, "surprised": {"hold": true, "tracks": [{"target": "#brow-left", "duration": 250, "fill": "forwards", "keyframes": [{"transform": "translateY(0)"}, {"transform": "translateY(-8px)"}]}, {"target": "#brow-right", "duration": 250, "fill": "forwards", "keyframes": [{"transform": "translateY(0)"}, {"transform": "translateY(-8px)"}]}, {"target": "#eyes", "duration": 250, "fill": "forwards", "keyframes": [{"transform": "scale(1)"}, {"transform": "scale(1.22)"}]}]}, "neutral": {"reset": true, "tracks": []}}}, "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 220 280\">\n  <g id=\"puppet\" style=\"transform-box:fill-box;transform-origin:50% 100%\">\n\n    <g id=\"legs\">\n      <rect id=\"leg-left\" x=\"84\" y=\"228\" width=\"15\" height=\"36\" rx=\"7\" fill=\"#4a5568\"/>\n      <rect id=\"leg-right\" x=\"122\" y=\"228\" width=\"15\" height=\"36\" rx=\"7\" fill=\"#4a5568\"/>\n      <ellipse cx=\"90\" cy=\"266\" rx=\"15\" ry=\"7\" fill=\"#2d3748\"/>\n      <ellipse cx=\"130\" cy=\"266\" rx=\"15\" ry=\"7\" fill=\"#2d3748\"/>\n    </g>\n\n    <g id=\"arm-left\" style=\"transform-box:fill-box;transform-origin:70% 10%\">\n      <path d=\"M68,168 Q48,190 52,212\" stroke=\"#ed8936\" stroke-width=\"14\" fill=\"none\" stroke-linecap=\"round\"/>\n      <circle cx=\"52\" cy=\"214\" r=\"9\" fill=\"#f6ad55\"/>\n    </g>\n    <g id=\"arm-right\" style=\"transform-box:fill-box;transform-origin:30% 10%\">\n      <path d=\"M152,168 Q172,190 168,212\" stroke=\"#ed8936\" stroke-width=\"14\" fill=\"none\" stroke-linecap=\"round\"/>\n      <circle cx=\"168\" cy=\"214\" r=\"9\" fill=\"#f6ad55\"/>\n    </g>\n\n    <g id=\"body\">\n      <path d=\"M70,150 Q110,134 150,150 L157,226 Q110,246 63,226 Z\" fill=\"#ed8936\"/>\n      <ellipse cx=\"110\" cy=\"204\" rx=\"27\" ry=\"21\" fill=\"#fbd38d\"/>\n    </g>\n\n    <g id=\"head\" style=\"transform-box:fill-box;transform-origin:50% 90%\">\n      <circle cx=\"110\" cy=\"88\" r=\"64\" fill=\"#f6ad55\" stroke=\"#dd6b20\" stroke-width=\"3\"/>\n      <path d=\"M96,26 Q104,10 118,18 Q110,22 112,30\" fill=\"#dd6b20\"/>\n\n      <circle id=\"cheek-left\" cx=\"70\" cy=\"102\" r=\"9\" fill=\"#fc8181\" opacity=\"0.45\"/>\n      <circle id=\"cheek-right\" cx=\"150\" cy=\"102\" r=\"9\" fill=\"#fc8181\" opacity=\"0.45\"/>\n\n      <g id=\"brows\">\n        <path id=\"brow-left\" style=\"transform-box:fill-box;transform-origin:50% 50%\"\n              d=\"M74,58 Q86,50 98,57\" stroke=\"#7b341e\" stroke-width=\"5\" fill=\"none\" stroke-linecap=\"round\"/>\n        <path id=\"brow-right\" style=\"transform-box:fill-box;transform-origin:50% 50%\"\n              d=\"M122,57 Q134,50 146,58\" stroke=\"#7b341e\" stroke-width=\"5\" fill=\"none\" stroke-linecap=\"round\"/>\n      </g>\n\n      <g id=\"eyes\" style=\"transform-box:fill-box;transform-origin:50% 50%\">\n        <g id=\"eye-left\">\n          <circle cx=\"86\" cy=\"80\" r=\"12\" fill=\"#fff\" stroke=\"#7b341e\" stroke-width=\"2\"/>\n        </g>\n        <g id=\"eye-right\">\n          <circle cx=\"134\" cy=\"80\" r=\"12\" fill=\"#fff\" stroke=\"#7b341e\" stroke-width=\"2\"/>\n        </g>\n        <g id=\"pupils\">\n          <circle cx=\"88\" cy=\"81\" r=\"5.5\" fill=\"#2d3748\"/>\n          <circle cx=\"136\" cy=\"81\" r=\"5.5\" fill=\"#2d3748\"/>\n        </g>\n      </g>\n\n      <!-- Rhubarb mouth shapes: exactly one visible at a time -->\n      <g id=\"mouths\">\n        <g id=\"mouth-X\">\n          <path d=\"M96,122 Q110,129 124,122\" stroke=\"#7b341e\" stroke-width=\"4.5\" fill=\"none\" stroke-linecap=\"round\"/>\n        </g>\n        <g id=\"mouth-A\">\n          <path d=\"M95,124 L125,124\" stroke=\"#7b341e\" stroke-width=\"5\" fill=\"none\" stroke-linecap=\"round\"/>\n        </g>\n        <g id=\"mouth-B\">\n          <path d=\"M95,119 Q110,115 125,119 Q125,131 110,132 Q95,131 95,119 Z\" fill=\"#5f2412\"/>\n          <rect x=\"99\" y=\"119\" width=\"22\" height=\"5\" rx=\"2\" fill=\"#fff\"/>\n        </g>\n        <g id=\"mouth-C\">\n          <ellipse cx=\"110\" cy=\"124\" rx=\"13\" ry=\"8.5\" fill=\"#5f2412\"/>\n        </g>\n        <g id=\"mouth-D\">\n          <ellipse cx=\"110\" cy=\"125\" rx=\"17\" ry=\"13\" fill=\"#5f2412\"/>\n          <ellipse cx=\"110\" cy=\"133\" rx=\"9\" ry=\"5\" fill=\"#fc8181\"/>\n        </g>\n        <g id=\"mouth-E\">\n          <circle cx=\"110\" cy=\"124\" r=\"8\" fill=\"#5f2412\"/>\n        </g>\n        <g id=\"mouth-F\">\n          <ellipse cx=\"110\" cy=\"124\" rx=\"5.5\" ry=\"7.5\" fill=\"#5f2412\" stroke=\"#c05621\" stroke-width=\"3\"/>\n        </g>\n        <g id=\"mouth-G\">\n          <rect x=\"99\" y=\"119\" width=\"22\" height=\"6.5\" rx=\"2.5\" fill=\"#fff\" stroke=\"#7b341e\" stroke-width=\"1.5\"/>\n          <path d=\"M96,129 Q110,133 124,129\" stroke=\"#7b341e\" stroke-width=\"4\" fill=\"none\" stroke-linecap=\"round\"/>\n        </g>\n        <g id=\"mouth-H\">\n          <ellipse cx=\"110\" cy=\"124\" rx=\"12\" ry=\"9.5\" fill=\"#5f2412\"/>\n          <ellipse cx=\"110\" cy=\"118.5\" rx=\"6.5\" ry=\"3.5\" fill=\"#fc8181\"/>\n        </g>\n      </g>\n    </g>\n  </g>\n</svg>\n"}};</script>
+<script>window.PUPPET_CHARACTERS = {"ava": {"manifest": {"name": "Ava", "svg": "puppet.svg", "height": 600, "voice": {"engine": "say", "voice": "Samantha"}, "mouths": {"A": "#mouth-A", "B": "#mouth-B", "C": "#mouth-C", "D": "#mouth-D", "E": "#mouth-E", "F": "#mouth-F", "G": "#mouth-G", "H": "#mouth-H", "X": "#mouth-X"}, "restMouth": "X", "blink": {"target": "#eyes"}, "look": {"target": ".iris", "dx": 3, "dy": 1.5}, "walk": {"speed": 190, "bob": true}, "views": {"face": {"focus": "#head", "fill": 0.62, "centerY": 0.48}}, "idle": {"breathe": {"target": "#torso", "amount": 1.4, "period": 4200}, "gaze": true}, "actions": {"wave": {"tracks": [{"target": "#arm-right", "duration": 1800, "keyframes": [{"transform": "rotate(0deg)"}, {"transform": "rotate(-140deg)", "offset": 0.3}, {"transform": "rotate(-120deg)", "offset": 0.45}, {"transform": "rotate(-140deg)", "offset": 0.6}, {"transform": "rotate(-120deg)", "offset": 0.72}, {"transform": "rotate(0deg)"}]}]}, "nod": {"tracks": [{"target": "#head", "duration": 1200, "keyframes": [{"transform": "translateY(0)"}, {"transform": "translateY(6px) rotate(2deg)", "offset": 0.25}, {"transform": "translateY(0)", "offset": 0.5}, {"transform": "translateY(6px) rotate(2deg)", "offset": 0.75}, {"transform": "translateY(0)"}]}]}, "shake": {"tracks": [{"target": "#head", "duration": 1200, "keyframes": [{"transform": "translateX(0)"}, {"transform": "translateX(-6px) rotate(-2deg)", "offset": 0.2}, {"transform": "translateX(6px) rotate(2deg)", "offset": 0.45}, {"transform": "translateX(-6px) rotate(-2deg)", "offset": 0.7}, {"transform": "translateX(0)"}]}]}, "shrug": {"tracks": [{"target": "#arm-left", "duration": 1100, "keyframes": [{"transform": "translateY(0) rotate(0deg)"}, {"transform": "translateY(-7px) rotate(9deg)", "offset": 0.35}, {"transform": "translateY(-7px) rotate(9deg)", "offset": 0.65}, {"transform": "translateY(0) rotate(0deg)"}]}, {"target": "#arm-right", "duration": 1100, "keyframes": [{"transform": "translateY(0) rotate(0deg)"}, {"transform": "translateY(-7px) rotate(-9deg)", "offset": 0.35}, {"transform": "translateY(-7px) rotate(-9deg)", "offset": 0.65}, {"transform": "translateY(0) rotate(0deg)"}]}, {"target": "#head", "duration": 1100, "keyframes": [{"transform": "rotate(0deg)"}, {"transform": "rotate(-4deg)", "offset": 0.35}, {"transform": "rotate(-4deg)", "offset": 0.65}, {"transform": "rotate(0deg)"}]}]}, "bow": {"tracks": [{"target": "#puppet", "duration": 1800, "easing": "ease-in-out", "keyframes": [{"transform": "rotate(0deg)"}, {"transform": "rotate(14deg)", "offset": 0.35}, {"transform": "rotate(14deg)", "offset": 0.65}, {"transform": "rotate(0deg)"}]}]}, "happy": {"hold": true, "tracks": [{"target": "#brow-left", "duration": 350, "fill": "forwards", "keyframes": [{"transform": "translateY(0)"}, {"transform": "translateY(-2px)"}]}, {"target": "#brow-right", "duration": 350, "fill": "forwards", "keyframes": [{"transform": "translateY(0)"}, {"transform": "translateY(-2px)"}]}, {"target": "#cheek-left", "duration": 350, "fill": "forwards", "keyframes": [{"opacity": 0.3}, {"opacity": 0.55}]}, {"target": "#cheek-right", "duration": 350, "fill": "forwards", "keyframes": [{"opacity": 0.3}, {"opacity": 0.55}]}, {"target": "#eyes", "duration": 350, "fill": "forwards", "keyframes": [{"transform": "scaleY(1)"}, {"transform": "scaleY(0.88)"}]}]}, "sad": {"hold": true, "tracks": [{"target": "#brow-left", "duration": 350, "fill": "forwards", "keyframes": [{"transform": "rotate(0deg) translateY(0)"}, {"transform": "rotate(10deg) translateY(2px)"}]}, {"target": "#brow-right", "duration": 350, "fill": "forwards", "keyframes": [{"transform": "rotate(0deg) translateY(0)"}, {"transform": "rotate(-10deg) translateY(2px)"}]}, {"target": "#head", "duration": 350, "fill": "forwards", "keyframes": [{"transform": "translateY(0) rotate(0deg)"}, {"transform": "translateY(4px) rotate(-2deg)"}]}]}, "surprised": {"hold": true, "tracks": [{"target": "#brow-left", "duration": 280, "fill": "forwards", "keyframes": [{"transform": "translateY(0)"}, {"transform": "translateY(-4px)"}]}, {"target": "#brow-right", "duration": 280, "fill": "forwards", "keyframes": [{"transform": "translateY(0)"}, {"transform": "translateY(-4px)"}]}, {"target": "#eyes", "duration": 280, "fill": "forwards", "keyframes": [{"transform": "scale(1)"}, {"transform": "scale(1.18)"}]}]}, "neutral": {"reset": true, "tracks": []}}}, "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 220 560\">\n  <defs>\n    <clipPath id=\"ava-eye-left\"><path d=\"M80,64 Q88,56.5 96.5,63 Q88,71.5 80,64 Z\"/></clipPath>\n    <clipPath id=\"ava-eye-right\"><path d=\"M123.5,63 Q132,56.5 140,64 Q132,71.5 123.5,63 Z\"/></clipPath>\n  </defs>\n  <g id=\"puppet\" style=\"transform-box:fill-box;transform-origin:50% 100%\">\n\n    <g id=\"legs\">\n      <path d=\"M72,246 Q110,258 148,246 L150,302 Q110,314 70,302 Z\" fill=\"#3d5578\"/>\n      <path id=\"leg-left\" d=\"M78,300 C76,360 80,420 84,470 L84,528 L106,528 L104,470 C106,420 106,360 108,305 Z\" fill=\"#46608a\"/>\n      <path id=\"leg-right\" d=\"M112,305 C114,360 114,420 116,470 L114,528 L136,528 L136,470 C140,420 144,360 142,300 Z\" fill=\"#46608a\"/>\n      <ellipse cx=\"94\" cy=\"534\" rx=\"17\" ry=\"8\" fill=\"#6b4450\"/>\n      <ellipse cx=\"126\" cy=\"534\" rx=\"17\" ry=\"8\" fill=\"#6b4450\"/>\n    </g>\n\n    <g id=\"arm-left\" style=\"transform-box:fill-box;transform-origin:50% 5%\">\n      <path d=\"M68,175 C62,205 64,245 70,285\" stroke=\"#eab88f\" stroke-width=\"10\" fill=\"none\" stroke-linecap=\"round\"/>\n      <ellipse cx=\"71\" cy=\"292\" rx=\"5.5\" ry=\"8\" fill=\"#eab88f\"/>\n      <path d=\"M74,146 C64,150 58,160 60,178 C66,182 74,180 78,176 C78,164 78,154 74,146 Z\" fill=\"#ad7280\"/>\n    </g>\n    <g id=\"arm-right\" style=\"transform-box:fill-box;transform-origin:50% 5%\">\n      <path d=\"M152,175 C158,205 156,245 150,285\" stroke=\"#eab88f\" stroke-width=\"10\" fill=\"none\" stroke-linecap=\"round\"/>\n      <ellipse cx=\"149\" cy=\"292\" rx=\"5.5\" ry=\"8\" fill=\"#eab88f\"/>\n      <path d=\"M146,146 C156,150 162,160 160,178 C154,182 146,180 142,176 C142,164 142,154 146,146 Z\" fill=\"#ad7280\"/>\n    </g>\n\n    <g id=\"torso\">\n      <path d=\"M64,152 C70,140 90,131 110,131 C130,131 150,140 156,152 C159,178 158,205 154,232 C152,246 140,252 110,252 C80,252 68,246 66,232 C62,205 61,178 64,152 Z\" fill=\"#c2848f\"/>\n      <path d=\"M92,131 Q110,144 128,131 Q120,138 110,138 Q100,138 92,131 Z\" fill=\"#ab6f7c\"/>\n    </g>\n\n    <g id=\"hair-back\">\n      <path d=\"M110,16 C66,18 52,54 56,100 C58,148 52,186 62,210 C76,222 96,222 100,214 C92,170 92,130 94,100 L126,100 C128,130 128,170 120,214 C124,222 144,222 158,210 C168,186 162,148 164,100 C168,54 154,18 110,16 Z\" fill=\"#3b2a1f\"/>\n    </g>\n\n    <g id=\"neck\">\n      <path d=\"M100,98 L100,132 Q110,141 120,132 L120,98 Z\" fill=\"#eab88f\"/>\n      <path d=\"M100,102 Q110,111 120,102 L120,107 Q110,115 100,107 Z\" fill=\"#d49c72\" opacity=\"0.35\"/>\n    </g>\n\n    <g id=\"head\" style=\"transform-box:fill-box;transform-origin:50% 88%\">\n      <path d=\"M110,26 C90,26 78,44 79,66 C80,88 92,104 110,109 C128,104 140,88 141,66 C142,44 130,26 110,26 Z\" fill=\"#f0c29c\"/>\n      <path d=\"M132,84 C128,96 120,104 112,107\" stroke=\"#d8a279\" stroke-width=\"1.5\" fill=\"none\" opacity=\"0.3\"/>\n\n      <ellipse id=\"cheek-left\" cx=\"88\" cy=\"81\" rx=\"6.5\" ry=\"3.6\" fill=\"#e78f83\" opacity=\"0.22\"/>\n      <ellipse id=\"cheek-right\" cx=\"132\" cy=\"81\" rx=\"6.5\" ry=\"3.6\" fill=\"#e78f83\" opacity=\"0.22\"/>\n\n      <g id=\"brows\">\n        <path id=\"brow-left\" style=\"transform-box:fill-box;transform-origin:50% 50%\"\n              d=\"M80,53.5 Q88,49.5 96,52\" stroke=\"#33241a\" stroke-width=\"2.6\" fill=\"none\" stroke-linecap=\"round\"/>\n        <path id=\"brow-right\" style=\"transform-box:fill-box;transform-origin:50% 50%\"\n              d=\"M124,52 Q132,49.5 140,53.5\" stroke=\"#33241a\" stroke-width=\"2.6\" fill=\"none\" stroke-linecap=\"round\"/>\n      </g>\n\n      <g id=\"eyes\" style=\"transform-box:fill-box;transform-origin:50% 50%\">\n        <path d=\"M80,64 Q88,56.5 96.5,63 Q88,71.5 80,64 Z\" fill=\"#fdfbf7\"/>\n        <path d=\"M123.5,63 Q132,56.5 140,64 Q132,71.5 123.5,63 Z\" fill=\"#fdfbf7\"/>\n        <g clip-path=\"url(#ava-eye-left)\">\n          <g class=\"iris\">\n            <circle cx=\"88\" cy=\"64.5\" r=\"4.4\" fill=\"#7a5230\"/>\n            <circle cx=\"88\" cy=\"64.5\" r=\"2\" fill=\"#1e1410\"/>\n            <circle cx=\"86.7\" cy=\"63.2\" r=\"1\" fill=\"#fff\"/>\n          </g>\n        </g>\n        <g clip-path=\"url(#ava-eye-right)\">\n          <g class=\"iris\">\n            <circle cx=\"132\" cy=\"64.5\" r=\"4.4\" fill=\"#7a5230\"/>\n            <circle cx=\"132\" cy=\"64.5\" r=\"2\" fill=\"#1e1410\"/>\n            <circle cx=\"130.7\" cy=\"63.2\" r=\"1\" fill=\"#fff\"/>\n          </g>\n        </g>\n        <path d=\"M80,63.8 Q88,57 96.5,63\" stroke=\"#241a12\" stroke-width=\"1.6\" fill=\"none\" stroke-linecap=\"round\"/>\n        <path d=\"M123.5,63 Q132,57 140,63.8\" stroke=\"#241a12\" stroke-width=\"1.6\" fill=\"none\" stroke-linecap=\"round\"/>\n      </g>\n\n      <g id=\"nose\">\n        <path d=\"M106.5,68 Q105,78 102.5,85.5\" stroke=\"#d8a279\" stroke-width=\"1.4\" fill=\"none\" opacity=\"0.45\"/>\n        <path d=\"M102.5,86.5 Q106,89.5 110.5,87.5\" stroke=\"#c98f66\" stroke-width=\"1.4\" fill=\"none\" stroke-linecap=\"round\" opacity=\"0.8\"/>\n      </g>\n\n      <!-- Rhubarb visemes as realistic lip shapes; one visible at a time -->\n      <g id=\"mouths\">\n        <g id=\"mouth-X\">\n          <path d=\"M98,95.6 C103,92.6 107,93.4 110,94.8 C113,93.4 117,92.6 122,95.6 C117,97 113,97.4 110,97.4 C107,97.4 103,97 98,95.6 Z\" fill=\"#c06b74\"/>\n          <path d=\"M99,96 Q110,102.6 121,96 Q110,98.8 99,96 Z\" fill=\"#d67f88\"/>\n        </g>\n        <g id=\"mouth-A\">\n          <path d=\"M97,95.6 Q110,92.8 123,95.6 Q110,97.2 97,95.6 Z\" fill=\"#c06b74\"/>\n          <path d=\"M98,96 Q110,100.6 122,96 Q110,97.6 98,96 Z\" fill=\"#d67f88\"/>\n        </g>\n        <g id=\"mouth-B\">\n          <path d=\"M99,94.5 Q110,92 121,94.5 Q121,100.5 110,101.5 Q99,100.5 99,94.5 Z\" fill=\"#5a2a30\"/>\n          <rect x=\"102\" y=\"94.6\" width=\"16\" height=\"3\" rx=\"1.2\" fill=\"#fbf6f0\"/>\n          <path d=\"M99,94.5 Q110,91.8 121,94.5\" stroke=\"#c06b74\" stroke-width=\"1.6\" fill=\"none\" stroke-linecap=\"round\"/>\n          <path d=\"M99,94.8 Q110,102.5 121,94.8\" stroke=\"#d67f88\" stroke-width=\"1.6\" fill=\"none\" stroke-linecap=\"round\"/>\n        </g>\n        <g id=\"mouth-C\">\n          <path d=\"M100,93 Q110,90.5 120,93 Q122,101 110,104 Q98,101 100,93 Z\" fill=\"#5a2a30\"/>\n          <rect x=\"102\" y=\"93.4\" width=\"16\" height=\"3.4\" rx=\"1.4\" fill=\"#fbf6f0\"/>\n          <path d=\"M100,93 Q110,90.2 120,93 Q122,101.5 110,104.5 Q98,101.5 100,93 Z\" stroke=\"#c06b74\" stroke-width=\"1.6\" fill=\"none\"/>\n        </g>\n        <g id=\"mouth-D\">\n          <path d=\"M97,92 Q110,89 123,92 Q126,103 110,108 Q94,103 97,92 Z\" fill=\"#5a2a30\"/>\n          <rect x=\"100\" y=\"92.6\" width=\"20\" height=\"3.6\" rx=\"1.5\" fill=\"#fbf6f0\"/>\n          <ellipse cx=\"110\" cy=\"103.5\" rx=\"8\" ry=\"3.5\" fill=\"#c46a72\"/>\n          <path d=\"M97,92 Q110,88.6 123,92 Q126,103.5 110,108.5 Q94,103.5 97,92 Z\" stroke=\"#c06b74\" stroke-width=\"1.6\" fill=\"none\"/>\n        </g>\n        <g id=\"mouth-E\">\n          <ellipse cx=\"110\" cy=\"97.5\" rx=\"7.5\" ry=\"5.5\" fill=\"#5a2a30\"/>\n          <ellipse cx=\"110\" cy=\"97.5\" rx=\"7.5\" ry=\"5.5\" stroke=\"#c06b74\" stroke-width=\"1.8\" fill=\"none\"/>\n        </g>\n        <g id=\"mouth-F\">\n          <ellipse cx=\"110\" cy=\"97\" rx=\"4.6\" ry=\"5.6\" fill=\"#5a2a30\"/>\n          <ellipse cx=\"110\" cy=\"97\" rx=\"5.4\" ry=\"6.4\" stroke=\"#d67f88\" stroke-width=\"2.6\" fill=\"none\"/>\n        </g>\n        <g id=\"mouth-G\">\n          <rect x=\"103\" y=\"94\" width=\"14\" height=\"3.4\" rx=\"1.4\" fill=\"#fbf6f0\" stroke=\"#8a4a52\" stroke-width=\"0.8\"/>\n          <path d=\"M100,99 Q110,102.5 120,99\" stroke=\"#d67f88\" stroke-width=\"2.6\" fill=\"none\" stroke-linecap=\"round\"/>\n        </g>\n        <g id=\"mouth-H\">\n          <path d=\"M100,93.5 Q110,91 120,93.5 Q122,102 110,104.5 Q98,102 100,93.5 Z\" fill=\"#5a2a30\"/>\n          <ellipse cx=\"110\" cy=\"95.4\" rx=\"5.5\" ry=\"2.6\" fill=\"#c46a72\"/>\n          <path d=\"M100,93.5 Q110,90.7 120,93.5 Q122,102.5 110,105 Q98,102.5 100,93.5 Z\" stroke=\"#c06b74\" stroke-width=\"1.6\" fill=\"none\"/>\n        </g>\n      </g>\n\n      <g id=\"hair-front\">\n        <path d=\"M79,64 C78,40 92,24 110,24 C128,24 142,40 141,64 C141,70 140,76 139,80 C138,58 128,44 110,44 C92,44 82,58 81,80 C80,76 79,70 79,64 Z\" fill=\"#3b2a1f\"/>\n        <path d=\"M110,25 C109,31 109,37 110,43\" stroke=\"#2c1f16\" stroke-width=\"1.2\" fill=\"none\" opacity=\"0.6\"/>\n      </g>\n    </g>\n  </g>\n</svg>\n"}, "bo": {"manifest": {"name": "Bo", "svg": "puppet.svg", "height": 320, "voice": {"engine": "say", "voice": "Fred"}, "mouths": {"A": "#mouth-A", "B": "#mouth-B", "C": "#mouth-C", "D": "#mouth-D", "E": "#mouth-E", "F": "#mouth-F", "G": "#mouth-G", "H": "#mouth-H", "X": "#mouth-X"}, "restMouth": "X", "blink": {"target": "#eyes"}, "look": {"target": "#pupils", "dx": 4, "dy": 2}, "walk": {"speed": 210, "bob": true}, "views": {"face": {"focus": "#head", "fill": 0.6, "centerY": 0.46}}, "idle": {"breathe": {"target": "#body", "amount": 1.4, "period": 4000}, "gaze": true}, "actions": {"wave": {"tracks": [{"target": "#arm-right", "duration": 1600, "keyframes": [{"transform": "rotate(0deg)"}, {"transform": "rotate(-160deg)", "offset": 0.25}, {"transform": "rotate(-130deg)", "offset": 0.4}, {"transform": "rotate(-160deg)", "offset": 0.55}, {"transform": "rotate(-130deg)", "offset": 0.7}, {"transform": "rotate(0deg)"}]}]}, "nod": {"tracks": [{"target": "#head", "duration": 1100, "keyframes": [{"transform": "translateY(0)"}, {"transform": "translateY(8px)", "offset": 0.25}, {"transform": "translateY(0)", "offset": 0.5}, {"transform": "translateY(8px)", "offset": 0.75}, {"transform": "translateY(0)"}]}]}, "shake": {"tracks": [{"target": "#head", "duration": 1100, "keyframes": [{"transform": "translateX(0)"}, {"transform": "translateX(-9px)", "offset": 0.2}, {"transform": "translateX(9px)", "offset": 0.45}, {"transform": "translateX(-9px)", "offset": 0.7}, {"transform": "translateX(0)"}]}]}, "happy": {"hold": true, "tracks": [{"target": "#brow-left", "duration": 300, "fill": "forwards", "keyframes": [{"transform": "translateY(0)"}, {"transform": "translateY(-4px)"}]}, {"target": "#brow-right", "duration": 300, "fill": "forwards", "keyframes": [{"transform": "translateY(0)"}, {"transform": "translateY(-4px)"}]}, {"target": "#cheek-left", "duration": 300, "fill": "forwards", "keyframes": [{"opacity": 0.35}, {"opacity": 0.85}]}, {"target": "#cheek-right", "duration": 300, "fill": "forwards", "keyframes": [{"opacity": 0.35}, {"opacity": 0.85}]}]}, "sad": {"hold": true, "tracks": [{"target": "#brow-left", "duration": 300, "fill": "forwards", "keyframes": [{"transform": "rotate(0deg) translateY(0)"}, {"transform": "rotate(12deg) translateY(3px)"}]}, {"target": "#brow-right", "duration": 300, "fill": "forwards", "keyframes": [{"transform": "rotate(0deg) translateY(0)"}, {"transform": "rotate(-12deg) translateY(3px)"}]}, {"target": "#head", "duration": 300, "fill": "forwards", "keyframes": [{"transform": "translateY(0)"}, {"transform": "translateY(6px)"}]}]}, "surprised": {"hold": true, "tracks": [{"target": "#brow-left", "duration": 250, "fill": "forwards", "keyframes": [{"transform": "translateY(0)"}, {"transform": "translateY(-7px)"}]}, {"target": "#brow-right", "duration": 250, "fill": "forwards", "keyframes": [{"transform": "translateY(0)"}, {"transform": "translateY(-7px)"}]}, {"target": "#eyes", "duration": 250, "fill": "forwards", "keyframes": [{"transform": "scale(1)"}, {"transform": "scale(1.2)"}]}]}, "neutral": {"reset": true, "tracks": []}}}, "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 300\">\n  <g id=\"puppet\" style=\"transform-box:fill-box;transform-origin:50% 100%\">\n\n    <g id=\"legs\">\n      <rect id=\"leg-left\" x=\"84\" y=\"222\" width=\"16\" height=\"38\" rx=\"8\" fill=\"#2e3a59\"/>\n      <rect id=\"leg-right\" x=\"104\" y=\"222\" width=\"16\" height=\"38\" rx=\"8\" fill=\"#2e3a59\"/>\n      <ellipse cx=\"91\" cy=\"264\" rx=\"18\" ry=\"8\" fill=\"#1a1a1a\"/>\n      <ellipse cx=\"113\" cy=\"264\" rx=\"18\" ry=\"8\" fill=\"#1a1a1a\"/>\n    </g>\n\n    <g id=\"arm-left\" style=\"transform-box:fill-box;transform-origin:75% 8%\">\n      <path d=\"M64,150 Q42,174 48,200\" stroke=\"#1a1a1a\" stroke-width=\"14\" fill=\"none\" stroke-linecap=\"round\"/>\n      <circle cx=\"48\" cy=\"202\" r=\"11\" fill=\"#ffffff\" stroke=\"#1a1a1a\" stroke-width=\"3\"/>\n    </g>\n    <g id=\"arm-right\" style=\"transform-box:fill-box;transform-origin:25% 8%\">\n      <path d=\"M136,150 Q158,174 152,200\" stroke=\"#1a1a1a\" stroke-width=\"14\" fill=\"none\" stroke-linecap=\"round\"/>\n      <circle cx=\"152\" cy=\"202\" r=\"11\" fill=\"#ffffff\" stroke=\"#1a1a1a\" stroke-width=\"3\"/>\n    </g>\n\n    <g id=\"body\">\n      <path d=\"M70,150 Q100,136 130,150 L136,224 Q100,241 64,224 Z\" fill=\"#a8362f\" stroke=\"#1a1a1a\" stroke-width=\"3\"/>\n      <circle cx=\"100\" cy=\"175\" r=\"4\" fill=\"#ffffff\" stroke=\"#1a1a1a\" stroke-width=\"1.5\"/>\n      <circle cx=\"100\" cy=\"195\" r=\"4\" fill=\"#ffffff\" stroke=\"#1a1a1a\" stroke-width=\"1.5\"/>\n      <path d=\"M92,150 L100,158 L108,150 L104,146 Q100,150 96,146 Z\" fill=\"#1a1a1a\"/>\n    </g>\n\n    <g id=\"head\" style=\"transform-box:fill-box;transform-origin:50% 88%\">\n      <circle cx=\"100\" cy=\"95\" r=\"58\" fill=\"#f6dfae\" stroke=\"#1a1a1a\" stroke-width=\"4\"/>\n\n      <ellipse id=\"cheek-left\" cx=\"66\" cy=\"112\" rx=\"8\" ry=\"5\" fill=\"#e0777a\" opacity=\"0.35\"/>\n      <ellipse id=\"cheek-right\" cx=\"134\" cy=\"112\" rx=\"8\" ry=\"5\" fill=\"#e0777a\" opacity=\"0.35\"/>\n\n      <g id=\"brows\">\n        <path id=\"brow-left\" style=\"transform-box:fill-box;transform-origin:50% 50%\"\n              d=\"M66,66 Q78,58 90,65\" stroke=\"#1a1a1a\" stroke-width=\"5\" fill=\"none\" stroke-linecap=\"round\"/>\n        <path id=\"brow-right\" style=\"transform-box:fill-box;transform-origin:50% 50%\"\n              d=\"M110,65 Q122,58 134,66\" stroke=\"#1a1a1a\" stroke-width=\"5\" fill=\"none\" stroke-linecap=\"round\"/>\n      </g>\n\n      <!-- Pie-cut eyes: white sclera behind a black wedge-cut pupil, classic rubber-hose look -->\n      <g id=\"eyes\" style=\"transform-box:fill-box;transform-origin:50% 50%\">\n        <g id=\"eye-left\">\n          <ellipse cx=\"80\" cy=\"92\" rx=\"14\" ry=\"16\" fill=\"#ffffff\" stroke=\"#1a1a1a\" stroke-width=\"3\"/>\n        </g>\n        <g id=\"eye-right\">\n          <ellipse cx=\"120\" cy=\"92\" rx=\"14\" ry=\"16\" fill=\"#ffffff\" stroke=\"#1a1a1a\" stroke-width=\"3\"/>\n        </g>\n        <g id=\"pupils\">\n          <circle cx=\"80\" cy=\"93\" r=\"8\" fill=\"#1a1a1a\"/>\n          <circle cx=\"120\" cy=\"93\" r=\"8\" fill=\"#1a1a1a\"/>\n          <circle cx=\"82.6\" cy=\"90.4\" r=\"2.4\" fill=\"#ffffff\"/>\n          <circle cx=\"122.6\" cy=\"90.4\" r=\"2.4\" fill=\"#ffffff\"/>\n        </g>\n      </g>\n\n      <g id=\"nose\">\n        <path d=\"M96,106 Q100,112 104,106 Q100,110 96,106 Z\" fill=\"#1a1a1a\"/>\n      </g>\n\n      <!-- Nine viseme mouth shapes, flat cartoon style: exactly one visible at a time -->\n      <g id=\"mouths\">\n        <g id=\"mouth-X\">\n          <path d=\"M85,127 Q100,133 115,127\" stroke=\"#1a1a1a\" stroke-width=\"4\" fill=\"none\" stroke-linecap=\"round\"/>\n        </g>\n        <g id=\"mouth-A\">\n          <path d=\"M85,129 L115,129\" stroke=\"#1a1a1a\" stroke-width=\"5\" fill=\"none\" stroke-linecap=\"round\"/>\n        </g>\n        <g id=\"mouth-B\">\n          <path d=\"M86,124 Q100,120 114,124 Q114,135 100,136 Q86,135 86,124 Z\" fill=\"#1a1a1a\"/>\n          <rect x=\"90\" y=\"124\" width=\"20\" height=\"5\" rx=\"2\" fill=\"#ffffff\"/>\n        </g>\n        <g id=\"mouth-C\">\n          <ellipse cx=\"100\" cy=\"129\" rx=\"13\" ry=\"8.5\" fill=\"#1a1a1a\"/>\n        </g>\n        <g id=\"mouth-D\">\n          <ellipse cx=\"100\" cy=\"130\" rx=\"17\" ry=\"13\" fill=\"#1a1a1a\"/>\n          <ellipse cx=\"100\" cy=\"138\" rx=\"9\" ry=\"5\" fill=\"#e0777a\"/>\n        </g>\n        <g id=\"mouth-E\">\n          <circle cx=\"100\" cy=\"129\" r=\"8\" fill=\"#1a1a1a\"/>\n        </g>\n        <g id=\"mouth-F\">\n          <ellipse cx=\"100\" cy=\"129\" rx=\"5.5\" ry=\"7.5\" fill=\"#1a1a1a\" stroke=\"#a8362f\" stroke-width=\"3\"/>\n        </g>\n        <g id=\"mouth-G\">\n          <rect x=\"89\" y=\"124\" width=\"22\" height=\"6.5\" rx=\"2.5\" fill=\"#ffffff\" stroke=\"#1a1a1a\" stroke-width=\"1.5\"/>\n          <path d=\"M86,134 Q100,138 114,134\" stroke=\"#1a1a1a\" stroke-width=\"4\" fill=\"none\" stroke-linecap=\"round\"/>\n        </g>\n        <g id=\"mouth-H\">\n          <ellipse cx=\"100\" cy=\"129\" rx=\"12\" ry=\"9.5\" fill=\"#1a1a1a\"/>\n          <ellipse cx=\"100\" cy=\"123.5\" rx=\"6.5\" ry=\"3.5\" fill=\"#e0777a\"/>\n        </g>\n      </g>\n    </g>\n  </g>\n</svg>\n"}, "pip": {"manifest": {"name": "Pip", "svg": "puppet.svg", "height": 300, "mouths": {"A": "#mouth-A", "B": "#mouth-B", "C": "#mouth-C", "D": "#mouth-D", "E": "#mouth-E", "F": "#mouth-F", "G": "#mouth-G", "H": "#mouth-H", "X": "#mouth-X"}, "restMouth": "X", "blink": {"target": "#eyes"}, "look": {"target": "#pupils", "dx": 5, "dy": 2}, "walk": {"speed": 230, "bob": true}, "actions": {"wave": {"tracks": [{"target": "#arm-right", "duration": 1600, "keyframes": [{"transform": "rotate(0deg)"}, {"transform": "rotate(-165deg)", "offset": 0.25}, {"transform": "rotate(-135deg)", "offset": 0.4}, {"transform": "rotate(-165deg)", "offset": 0.55}, {"transform": "rotate(-135deg)", "offset": 0.7}, {"transform": "rotate(0deg)"}]}]}, "jump": {"tracks": [{"target": "#puppet", "duration": 900, "easing": "ease-in-out", "keyframes": [{"transform": "translateY(0) scale(1,1)"}, {"transform": "translateY(5px) scale(1.08,0.88)", "offset": 0.2}, {"transform": "translateY(-52px) scale(0.95,1.08)", "offset": 0.5}, {"transform": "translateY(0) scale(1,1)", "offset": 0.8}, {"transform": "translateY(2px) scale(1.05,0.93)", "offset": 0.9}, {"transform": "translateY(0) scale(1,1)"}]}]}, "nod": {"tracks": [{"target": "#head", "duration": 1100, "keyframes": [{"transform": "translateY(0)"}, {"transform": "translateY(9px)", "offset": 0.25}, {"transform": "translateY(0)", "offset": 0.5}, {"transform": "translateY(9px)", "offset": 0.75}, {"transform": "translateY(0)"}]}]}, "shake": {"tracks": [{"target": "#head", "duration": 1100, "keyframes": [{"transform": "translateX(0)"}, {"transform": "translateX(-9px)", "offset": 0.2}, {"transform": "translateX(9px)", "offset": 0.45}, {"transform": "translateX(-9px)", "offset": 0.7}, {"transform": "translateX(0)"}]}]}, "bow": {"tracks": [{"target": "#puppet", "duration": 1800, "easing": "ease-in-out", "keyframes": [{"transform": "rotate(0deg)"}, {"transform": "rotate(24deg)", "offset": 0.35}, {"transform": "rotate(24deg)", "offset": 0.65}, {"transform": "rotate(0deg)"}]}]}, "dance": {"tracks": [{"target": "#puppet", "duration": 2400, "keyframes": [{"transform": "translateX(0) rotate(0deg)"}, {"transform": "translateX(-12px) rotate(-6deg)", "offset": 0.25}, {"transform": "translateX(12px) rotate(6deg)", "offset": 0.5}, {"transform": "translateX(-12px) rotate(-6deg)", "offset": 0.75}, {"transform": "translateX(0) rotate(0deg)"}]}, {"target": "#arm-right", "duration": 1200, "iterations": 2, "keyframes": [{"transform": "rotate(0deg)"}, {"transform": "rotate(-150deg)", "offset": 0.5}, {"transform": "rotate(0deg)"}]}, {"target": "#arm-left", "duration": 1200, "iterations": 2, "keyframes": [{"transform": "rotate(-150deg)"}, {"transform": "rotate(0deg)", "offset": 0.5}, {"transform": "rotate(-150deg)"}]}]}, "happy": {"hold": true, "tracks": [{"target": "#brow-left", "duration": 300, "fill": "forwards", "keyframes": [{"transform": "translateY(0)"}, {"transform": "translateY(-5px)"}]}, {"target": "#brow-right", "duration": 300, "fill": "forwards", "keyframes": [{"transform": "translateY(0)"}, {"transform": "translateY(-5px)"}]}, {"target": "#cheek-left", "duration": 300, "fill": "forwards", "keyframes": [{"opacity": 0.45}, {"opacity": 0.9}]}, {"target": "#cheek-right", "duration": 300, "fill": "forwards", "keyframes": [{"opacity": 0.45}, {"opacity": 0.9}]}]}, "sad": {"hold": true, "tracks": [{"target": "#brow-left", "duration": 300, "fill": "forwards", "keyframes": [{"transform": "rotate(0deg) translateY(0)"}, {"transform": "rotate(14deg) translateY(3px)"}]}, {"target": "#brow-right", "duration": 300, "fill": "forwards", "keyframes": [{"transform": "rotate(0deg) translateY(0)"}, {"transform": "rotate(-14deg) translateY(3px)"}]}, {"target": "#head", "duration": 300, "fill": "forwards", "keyframes": [{"transform": "translateY(0)"}, {"transform": "translateY(6px)"}]}]}, "surprised": {"hold": true, "tracks": [{"target": "#brow-left", "duration": 250, "fill": "forwards", "keyframes": [{"transform": "translateY(0)"}, {"transform": "translateY(-8px)"}]}, {"target": "#brow-right", "duration": 250, "fill": "forwards", "keyframes": [{"transform": "translateY(0)"}, {"transform": "translateY(-8px)"}]}, {"target": "#eyes", "duration": 250, "fill": "forwards", "keyframes": [{"transform": "scale(1)"}, {"transform": "scale(1.22)"}]}]}, "neutral": {"reset": true, "tracks": []}}}, "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 220 280\">\n  <g id=\"puppet\" style=\"transform-box:fill-box;transform-origin:50% 100%\">\n\n    <g id=\"legs\">\n      <rect id=\"leg-left\" x=\"84\" y=\"228\" width=\"15\" height=\"36\" rx=\"7\" fill=\"#4a5568\"/>\n      <rect id=\"leg-right\" x=\"122\" y=\"228\" width=\"15\" height=\"36\" rx=\"7\" fill=\"#4a5568\"/>\n      <ellipse cx=\"90\" cy=\"266\" rx=\"15\" ry=\"7\" fill=\"#2d3748\"/>\n      <ellipse cx=\"130\" cy=\"266\" rx=\"15\" ry=\"7\" fill=\"#2d3748\"/>\n    </g>\n\n    <g id=\"arm-left\" style=\"transform-box:fill-box;transform-origin:70% 10%\">\n      <path d=\"M68,168 Q48,190 52,212\" stroke=\"#ed8936\" stroke-width=\"14\" fill=\"none\" stroke-linecap=\"round\"/>\n      <circle cx=\"52\" cy=\"214\" r=\"9\" fill=\"#f6ad55\"/>\n    </g>\n    <g id=\"arm-right\" style=\"transform-box:fill-box;transform-origin:30% 10%\">\n      <path d=\"M152,168 Q172,190 168,212\" stroke=\"#ed8936\" stroke-width=\"14\" fill=\"none\" stroke-linecap=\"round\"/>\n      <circle cx=\"168\" cy=\"214\" r=\"9\" fill=\"#f6ad55\"/>\n    </g>\n\n    <g id=\"body\">\n      <path d=\"M70,150 Q110,134 150,150 L157,226 Q110,246 63,226 Z\" fill=\"#ed8936\"/>\n      <ellipse cx=\"110\" cy=\"204\" rx=\"27\" ry=\"21\" fill=\"#fbd38d\"/>\n    </g>\n\n    <g id=\"head\" style=\"transform-box:fill-box;transform-origin:50% 90%\">\n      <circle cx=\"110\" cy=\"88\" r=\"64\" fill=\"#f6ad55\" stroke=\"#dd6b20\" stroke-width=\"3\"/>\n      <path d=\"M96,26 Q104,10 118,18 Q110,22 112,30\" fill=\"#dd6b20\"/>\n\n      <circle id=\"cheek-left\" cx=\"70\" cy=\"102\" r=\"9\" fill=\"#fc8181\" opacity=\"0.45\"/>\n      <circle id=\"cheek-right\" cx=\"150\" cy=\"102\" r=\"9\" fill=\"#fc8181\" opacity=\"0.45\"/>\n\n      <g id=\"brows\">\n        <path id=\"brow-left\" style=\"transform-box:fill-box;transform-origin:50% 50%\"\n              d=\"M74,58 Q86,50 98,57\" stroke=\"#7b341e\" stroke-width=\"5\" fill=\"none\" stroke-linecap=\"round\"/>\n        <path id=\"brow-right\" style=\"transform-box:fill-box;transform-origin:50% 50%\"\n              d=\"M122,57 Q134,50 146,58\" stroke=\"#7b341e\" stroke-width=\"5\" fill=\"none\" stroke-linecap=\"round\"/>\n      </g>\n\n      <g id=\"eyes\" style=\"transform-box:fill-box;transform-origin:50% 50%\">\n        <g id=\"eye-left\">\n          <circle cx=\"86\" cy=\"80\" r=\"12\" fill=\"#fff\" stroke=\"#7b341e\" stroke-width=\"2\"/>\n        </g>\n        <g id=\"eye-right\">\n          <circle cx=\"134\" cy=\"80\" r=\"12\" fill=\"#fff\" stroke=\"#7b341e\" stroke-width=\"2\"/>\n        </g>\n        <g id=\"pupils\">\n          <circle cx=\"88\" cy=\"81\" r=\"5.5\" fill=\"#2d3748\"/>\n          <circle cx=\"136\" cy=\"81\" r=\"5.5\" fill=\"#2d3748\"/>\n        </g>\n      </g>\n\n      <!-- Rhubarb mouth shapes: exactly one visible at a time -->\n      <g id=\"mouths\">\n        <g id=\"mouth-X\">\n          <path d=\"M96,122 Q110,129 124,122\" stroke=\"#7b341e\" stroke-width=\"4.5\" fill=\"none\" stroke-linecap=\"round\"/>\n        </g>\n        <g id=\"mouth-A\">\n          <path d=\"M95,124 L125,124\" stroke=\"#7b341e\" stroke-width=\"5\" fill=\"none\" stroke-linecap=\"round\"/>\n        </g>\n        <g id=\"mouth-B\">\n          <path d=\"M95,119 Q110,115 125,119 Q125,131 110,132 Q95,131 95,119 Z\" fill=\"#5f2412\"/>\n          <rect x=\"99\" y=\"119\" width=\"22\" height=\"5\" rx=\"2\" fill=\"#fff\"/>\n        </g>\n        <g id=\"mouth-C\">\n          <ellipse cx=\"110\" cy=\"124\" rx=\"13\" ry=\"8.5\" fill=\"#5f2412\"/>\n        </g>\n        <g id=\"mouth-D\">\n          <ellipse cx=\"110\" cy=\"125\" rx=\"17\" ry=\"13\" fill=\"#5f2412\"/>\n          <ellipse cx=\"110\" cy=\"133\" rx=\"9\" ry=\"5\" fill=\"#fc8181\"/>\n        </g>\n        <g id=\"mouth-E\">\n          <circle cx=\"110\" cy=\"124\" r=\"8\" fill=\"#5f2412\"/>\n        </g>\n        <g id=\"mouth-F\">\n          <ellipse cx=\"110\" cy=\"124\" rx=\"5.5\" ry=\"7.5\" fill=\"#5f2412\" stroke=\"#c05621\" stroke-width=\"3\"/>\n        </g>\n        <g id=\"mouth-G\">\n          <rect x=\"99\" y=\"119\" width=\"22\" height=\"6.5\" rx=\"2.5\" fill=\"#fff\" stroke=\"#7b341e\" stroke-width=\"1.5\"/>\n          <path d=\"M96,129 Q110,133 124,129\" stroke=\"#7b341e\" stroke-width=\"4\" fill=\"none\" stroke-linecap=\"round\"/>\n        </g>\n        <g id=\"mouth-H\">\n          <ellipse cx=\"110\" cy=\"124\" rx=\"12\" ry=\"9.5\" fill=\"#5f2412\"/>\n          <ellipse cx=\"110\" cy=\"118.5\" rx=\"6.5\" ry=\"3.5\" fill=\"#fc8181\"/>\n        </g>\n      </g>\n    </g>\n  </g>\n</svg>\n"}};</script>
 <script>
 // DBBASIC adapter shim for the Puppet Stage frontend.
 //
@@ -195,12 +221,14 @@ _HTML = r'''<!doctype html>
       } catch { /* server briefly unreachable; keep polling */ }
       setTimeout(() => this.poll(), POLL_MS);
     }
-    async deliver(cue) {
-      if (cue.type === 'say-text') {
-        const d = await renderSpeech(cue);
+    async deliver(rawCue) {
+      let cue = rawCue;
+      if (rawCue.type === 'say-text') {
+        const d = await renderSpeech(rawCue);
         cue = d.status === 'ok'
           ? { type: 'speak', audio: d.audio, timeline: d.timeline, duration: d.duration, text: d.text }
           : { type: 'error', message: d.error || 'speech failed' };
+        if (cue.type === 'speak' && rawCue.frame) cue.frame = rawCue.frame;
       }
       if (this.onmessage) this.onmessage({ data: JSON.stringify(cue) });
     }
@@ -208,10 +236,76 @@ _HTML = r'''<!doctype html>
   window.EventSource = function () { return new PollingEventSource(); };
 
   // ------------------------------------------------- screenplay (client)
+  //
+  // Grammar mirrors server.js parseScript/directionCue exactly — keep the
+  // two in sync when either changes.
 
-  function directionCue(body) {
+  const LAYOUT_FRAMES = {
+    single: ['main'],
+    split: ['left', 'right'],
+    thirds: ['third-l', 'third-c', 'third-r'],
+    'pip-tr': ['main', 'pip'], 'pip-tl': ['main', 'pip'],
+    'pip-br': ['main', 'pip'], 'pip-bl': ['main', 'pip'],
+  };
+
+  function parseKV(str) {
+    const out = {};
+    const re = /([a-z][\w-]*):("([^"]*)"|\S+)/gi;
+    let m;
+    while ((m = re.exec(str))) out[m[1].toLowerCase()] = m[3] !== undefined ? m[3] : m[2];
+    return out;
+  }
+
+  function directionCue(body, frameIds) {
+    frameIds = frameIds || new Set(['main']);
     const parts = body.trim().split(/\s+/);
     const head = parts[0].toLowerCase();
+
+    if (head === 'layout') {
+      const preset = (parts[1] || 'single').toLowerCase();
+      const ids = LAYOUT_FRAMES[preset] || ['main'];
+      frameIds.clear();
+      for (const id of ids) frameIds.add(id);
+      return { type: 'layout', preset };
+    }
+
+    if (head === 'frame') {
+      const id = parts[1];
+      const restStr = parts.slice(2).join(' ');
+      if (/^clear\b/i.test(restStr)) {
+        frameIds.delete(id);
+        return { type: 'frame-clear', id };
+      }
+      const kv = parseKV(restStr);
+      const cue = { type: 'frame', id };
+      if (kv.slot) cue.slot = kv.slot;
+      if (kv.bg) cue.bg = kv.bg;
+      if (kv.character) cue.character = kv.character;
+      if (kv.view) cue.view = kv.view;
+      if (kv.facing !== undefined) cue.facing = parseInt(kv.facing, 10);
+      if (kv.rect) cue.rect = kv.rect.split(',').map(Number);
+      frameIds.add(id);
+      return cue;
+    }
+
+    if (head === 'scene') return { type: 'scene', bg: parts.slice(1).join(' ') };
+
+    if (head === 'show') {
+      const kv = parseKV(parts.slice(1).join(' '));
+      let kind = 'text', value = '';
+      for (const k of ['text', 'image', 'video']) {
+        if (kv[k] !== undefined) { kind = k; value = kv[k]; break; }
+      }
+      const cue = { type: 'content', kind, value };
+      if (kv.fit) cue.fit = kv.fit;
+      return cue;
+    }
+
+    if (head === 'lower-third') {
+      const strs = [...body.matchAll(/"([^"]*)"/g)].map((m) => m[1]);
+      return { type: 'overlay', template: 'lower-third', slots: { title: strs[0] || '', subtitle: strs[1] || '' } };
+    }
+
     if (head === 'walk' || head === 'enter' || head === 'exit') {
       const arg = parts[parts.length - 1].toLowerCase();
       let x = parseFloat(arg);
@@ -229,23 +323,42 @@ _HTML = r'''<!doctype html>
     if (head === 'engine' || head === 'voice' || head === 'rate') {
       return { type: 'setting', key: head, value: parts.slice(1).join(' ') };
     }
+
+    if (frameIds.has(head) && parts.length > 1) {
+      const sub = directionCue(parts.slice(1).join(' '), frameIds);
+      sub.frame = head;
+      return sub;
+    }
+
     return { type: 'action', name: head };
   }
 
   function parseScript(src) {
     const cues = [];
+    const frameIds = new Set(['main']);
     for (const rawLine of src.split('\n')) {
       const line = rawLine.trim();
       if (!line || line.startsWith('#')) continue;
       if (/^(\[[^\]]+\]\s*)+$/.test(line)) {
-        for (const m of line.matchAll(/\[([^\]]+)\]/g)) cues.push({ ...directionCue(m[1]), source: line });
+        for (const m of line.matchAll(/\[([^\]]+)\]/g)) cues.push({ ...directionCue(m[1], frameIds), source: line });
         continue;
       }
+
       let text = line;
+      let frame = null;
+      const speaker = text.match(/^([A-Za-z][\w-]*):\s*(.*)$/);
+      if (speaker && frameIds.has(speaker[1])) { frame = speaker[1]; text = speaker[2]; }
+
       let concurrent = null;
       const inline = text.match(/^\(([^)]+)\)\s*(.*)$/);
-      if (inline) { concurrent = { ...directionCue(inline[1]), source: line }; text = inline[2]; }
-      cues.push({ type: 'speak-line', text, concurrent, source: line });
+      if (inline) {
+        concurrent = { ...directionCue(inline[1], frameIds), source: line };
+        text = inline[2];
+        if (frame) concurrent.frame = frame;
+      }
+      const cue = { type: 'speak-line', text, concurrent, source: line };
+      if (frame) cue.frame = frame;
+      cues.push(cue);
     }
     return cues;
   }
@@ -274,7 +387,9 @@ _HTML = r'''<!doctype html>
         const d = await renderSpeech({ text: cue.text, ...settings });
         if (token !== scriptToken) break;
         if (cue.concurrent) await postCue(cue.concurrent);
-        await postCue({ type: 'say-text', text: cue.text, ...settings });
+        const sayCue = { type: 'say-text', text: cue.text, ...settings };
+        if (cue.frame) sayCue.frame = cue.frame;
+        await postCue(sayCue);
         await sleep(((d.duration || cue.text.split(/\s+/).length * 0.35) * 1000) + 400);
         continue;
       }
@@ -333,20 +448,64 @@ _HTML = r'''<!doctype html>
 <script>
 'use strict';
 
+// --------------------------------------------------------------- helpers
+
+function looksLikeUrl(v) {
+  return /^([a-z]+:)?\/\//i.test(v) || v.startsWith('/') || /\.[a-z0-9]{2,5}(\?.*)?$/i.test(v);
+}
+
+function assetUrl(kind, id) { return `/api/asset/${kind}/${id}`; }
+
+// Named slots resolve to stage-percent rects [x, y, w, h]. `rect:` on a
+// frame cue overrides `slot:` entirely.
+const SLOTS = {
+  full: [0, 0, 100, 100],
+  left: [0, 0, 50, 100],
+  right: [50, 0, 50, 100],
+  'third-l': [0, 0, 33.34, 100],
+  'third-c': [33.33, 0, 33.34, 100],
+  'third-r': [66.66, 0, 33.34, 100],
+  'pip-tr': [66, 4, 30, 30],
+  'pip-tl': [4, 4, 30, 30],
+  'pip-br': [66, 66, 30, 30],
+  'pip-bl': [4, 66, 30, 30],
+};
+
+// Layout presets: macros that clear existing frames and create the named ones.
+const LAYOUT_PRESETS = {
+  single: [{ id: 'main', slot: 'full' }],
+  split: [{ id: 'left', slot: 'left' }, { id: 'right', slot: 'right' }],
+  thirds: [
+    { id: 'third-l', slot: 'third-l' },
+    { id: 'third-c', slot: 'third-c' },
+    { id: 'third-r', slot: 'third-r' },
+  ],
+  'pip-tr': [{ id: 'main', slot: 'full' }, { id: 'pip', slot: 'pip-tr' }],
+  'pip-tl': [{ id: 'main', slot: 'full' }, { id: 'pip', slot: 'pip-tl' }],
+  'pip-br': [{ id: 'main', slot: 'full' }, { id: 'pip', slot: 'pip-br' }],
+  'pip-bl': [{ id: 'main', slot: 'full' }, { id: 'pip', slot: 'pip-bl' }],
+};
+
 // ---------------------------------------------------------------- Puppet
+//
+// A Puppet is bound to one frame's DOM subtree
+// (.frame-camera > .frame-pos > .frame-flip) rather than fixed page ids, so
+// several can exist side by side, one per frame.
 
 class Puppet {
-  constructor(stageEl) {
-    this.stage = stageEl;
-    this.pos = document.getElementById('puppet-pos');
-    this.flip = document.getElementById('puppet-flip');
+  constructor(frameEl) {
+    this.stage = frameEl;               // the frame's own rect (for width/camera math)
+    this.camera = frameEl.querySelector('.frame-camera');
+    this.pos = frameEl.querySelector('.frame-pos');
+    this.flip = frameEl.querySelector('.frame-flip');
     this.manifest = null;
+    this.characterName = null;
     this.mouthEls = {};
     this.currentMouth = null;
     this.heldAnims = [];
     this.walkAnim = null;
     this.bobAnim = null;
-    this.x = 50;              // percent of stage width
+    this.x = 50;              // percent of frame width
     this.facing = 1;          // 1 = right, -1 = left
     this.source = null;       // current AudioBufferSourceNode
     this.audioCtx = null;
@@ -355,7 +514,6 @@ class Puppet {
     this.blinkTimer = null;
     this.view = 'body';
     this.cam = { tx: 0, ty: 0, s: 1 };
-    this.camera = document.getElementById('camera');
     this.breathAnim = null;
     this.gazeTimer = null;
   }
@@ -563,7 +721,7 @@ class Puppet {
   // ------------------------------------------------------------- camera
 
   /**
-   * 'body' shows the whole stage; 'face' zooms the camera onto the
+   * 'body' shows the whole frame; 'face' zooms the camera onto the
    * character's face (manifest views.face.focus, default #head).
    */
   setView(mode, instant = false) {
@@ -580,7 +738,7 @@ class Puppet {
     const st = this.stage.getBoundingClientRect();
     const r = el.getBoundingClientRect();
     const c = this.cam;
-    // element rect in untransformed stage coordinates
+    // element rect in untransformed frame coordinates
     const lx = (r.left - st.left - c.tx) / c.s;
     const ly = (r.top - st.top - c.ty) / c.s;
     const lw = r.width / c.s;
@@ -645,18 +803,277 @@ class Puppet {
   }
 }
 
+// ---------------------------------------------------------------- Stage
+//
+// The Stage owns a map of frames (id -> {el, bgEl, contentEl, puppet}),
+// each an independent rectangular sub-stage: background, optional content
+// tile, optional character (a Puppet bound to that frame's DOM). Cues route
+// by cue.frame, defaulting to the active frame (boots as "main", full-size),
+// so with no frame cue ever sent the stage behaves exactly as a single
+// puppet on one full-stage frame.
+
+class Stage {
+  constructor(framesEl, overlaysEl) {
+    this.framesEl = framesEl;
+    this.overlaysEl = overlaysEl;
+    this.frames = new Map();
+    this.activeId = 'main';
+    this.overlays = new Map();
+    this.overlaySeq = 0;
+    this.overlayCache = new Map();
+    this.autoSlots = ['left', 'right'];
+    this.autoIdx = 0;
+  }
+
+  ensureFrame(id) { return this.frames.get(id) || this.createFrame(id); }
+
+  createFrame(id) {
+    const el = document.createElement('div');
+    el.className = 'frame';
+    el.dataset.id = id;
+    el.innerHTML =
+      '<div class="frame-bg"></div>' +
+      '<div class="frame-content"></div>' +
+      '<div class="frame-camera"><div class="frame-pos"><div class="frame-flip"></div></div></div>';
+    this.framesEl.appendChild(el);
+    const f = {
+      id, el,
+      bgEl: el.querySelector('.frame-bg'),
+      contentEl: el.querySelector('.frame-content'),
+      puppet: null,
+    };
+    this.frames.set(id, f);
+    this.setRect(f, 'full');
+    return f;
+  }
+
+  setRect(f, slot, rect) {
+    const r = rect || SLOTS[slot] || SLOTS.full;
+    f.el.style.left = r[0] + '%';
+    f.el.style.top = r[1] + '%';
+    f.el.style.width = r[2] + '%';
+    f.el.style.height = r[3] + '%';
+  }
+
+  autoSlot() {
+    const slot = this.autoSlots[this.autoIdx] || 'full';
+    this.autoIdx = Math.min(this.autoIdx + 1, this.autoSlots.length);
+    return slot;
+  }
+
+  async loadCharacterInto(f, name) {
+    if (!f.puppet) f.puppet = new Puppet(f.el);
+    await f.puppet.load(name);
+  }
+
+  // -------------------------------------------------------- frame cues
+
+  frame(cue) {
+    const existed = this.frames.has(cue.id);
+    const f = this.ensureFrame(cue.id);
+    if (cue.rect) this.setRect(f, null, cue.rect);
+    else if (cue.slot) this.setRect(f, cue.slot);
+    else if (!existed) this.setRect(f, this.autoSlot());
+    if (cue.bg !== undefined) this.setBg(f, cue.bg);
+    if (!cue.character) {
+      if (cue.view && f.puppet) f.puppet.setView(cue.view);
+      if (cue.facing !== undefined && f.puppet) f.puppet.face(cue.facing);
+    }
+    this.activeId = cue.id;
+    return f;
+  }
+
+  frameClear(cue) {
+    if (this.frames.size <= 1) return; // never remove the last frame
+    const f = this.frames.get(cue.id);
+    if (!f) return;
+    if (f.puppet) f.puppet.stopSpeaking();
+    f.el.remove();
+    this.frames.delete(cue.id);
+    if (this.activeId === cue.id) {
+      this.activeId = this.frames.has('main') ? 'main' : this.frames.keys().next().value;
+    }
+  }
+
+  layout(cue) {
+    const preset = cue.preset || 'single';
+    const specs = LAYOUT_PRESETS[preset] || LAYOUT_PRESETS.single;
+    const mainF = this.frames.get('main');
+    const keepChar = mainF && mainF.puppet ? mainF.puppet.characterName : null;
+
+    for (const f of this.frames.values()) { if (f.puppet) f.puppet.stopSpeaking(); f.el.remove(); }
+    this.frames.clear();
+    this.autoIdx = 0;
+
+    let firstId = null;
+    for (const spec of specs) {
+      const f = this.createFrame(spec.id);
+      this.setRect(f, spec.slot);
+      if (!firstId) firstId = spec.id;
+      if (spec.id === 'main' && keepChar) this.loadCharacterInto(f, keepChar);
+    }
+    this.activeId = this.frames.has('main') ? 'main' : firstId;
+  }
+
+  // ------------------------------------------------------------ content
+
+  content(cue) {
+    const id = cue.frame || this.activeId;
+    if (cue.frame) this.activeId = id;
+    this.renderContent(this.ensureFrame(id), cue);
+  }
+
+  contentClear(cue) {
+    const f = this.frames.get(cue.frame || this.activeId);
+    if (f) f.contentEl.innerHTML = '';
+  }
+
+  renderContent(f, cue) {
+    const el = f.contentEl;
+    el.innerHTML = '';
+    if (cue.kind === 'image' || cue.kind === 'video') {
+      const src = looksLikeUrl(cue.value) ? cue.value : assetUrl('props', cue.value);
+      const tag = document.createElement(cue.kind === 'video' ? 'video' : 'img');
+      tag.src = src;
+      tag.style.maxWidth = '100%';
+      tag.style.maxHeight = '100%';
+      tag.style.objectFit = cue.fit || 'contain';
+      if (cue.kind === 'video') { tag.autoplay = true; tag.loop = true; tag.muted = true; tag.playsInline = true; }
+      el.appendChild(tag);
+    } else {
+      const div = document.createElement('div');
+      div.className = 'content-text';
+      div.textContent = cue.value;
+      el.appendChild(div);
+    }
+  }
+
+  // -------------------------------------------------------------- scene
+
+  scene(cue) {
+    const id = cue.frame || this.activeId;
+    if (cue.frame) this.activeId = id;
+    this.setBg(this.ensureFrame(id), cue.bg);
+  }
+
+  setBg(f, bg) {
+    if (bg === undefined) return;
+    f.bgEl.innerHTML = '';
+    if (!bg) { f.bgEl.style.background = ''; return; }
+    if (/^#[0-9a-f]{3,8}$/i.test(bg) || /^(linear|radial)-gradient\(/.test(bg) || looksLikeUrl(bg)) {
+      f.bgEl.style.background = /^(linear|radial)-gradient\(/.test(bg) || bg.startsWith('#')
+        ? bg : `center / cover no-repeat url("${bg}")`;
+      return;
+    }
+    this.loadBgAsset(f, bg); // asset id: resolve against assets/backgrounds/<id>.*
+  }
+
+  async loadBgAsset(f, id) {
+    try {
+      const res = await fetch(assetUrl('backgrounds', id));
+      if (!res.ok) throw new Error('missing asset');
+      const ctype = res.headers.get('content-type') || '';
+      if (ctype.includes('svg')) {
+        f.bgEl.innerHTML = await res.text();
+        f.bgEl.style.background = '';
+      } else {
+        f.bgEl.style.background = `center / cover no-repeat url("${res.url}")`;
+      }
+    } catch { /* asset pack may not have this id yet; leave background as-is */ }
+  }
+
+  // ----------------------------------------------------------- overlays
+
+  overlay(cue) {
+    const id = cue.id || `ov${++this.overlaySeq}`;
+    let ov = this.overlays.get(id);
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.className = 'overlay';
+      this.overlaysEl.appendChild(ov);
+      this.overlays.set(id, ov);
+    }
+    clearTimeout(ov._holdTimer);
+    ov.dataset.enter = cue.enter || '';
+    ov.dataset.exit = cue.exit || '';
+    this.renderOverlay(ov, cue.template, cue.slots || {});
+    requestAnimationFrame(() => ov.classList.add('shown'));
+    if (cue.hold) ov._holdTimer = setTimeout(() => this.overlayClear({ id }), cue.hold);
+  }
+
+  overlayClear(cue) {
+    const removeOne = (id) => {
+      const ov = this.overlays.get(id);
+      if (!ov) return;
+      clearTimeout(ov._holdTimer);
+      this.overlays.delete(id);
+      ov.classList.remove('shown');
+      setTimeout(() => ov.remove(), 400);
+    };
+    if (cue && cue.id) { removeOne(cue.id); return; }
+    for (const id of [...this.overlays.keys()]) removeOne(id);
+  }
+
+  async renderOverlay(ov, template, slots) {
+    let html = this.overlayCache.get(template);
+    if (html === undefined) {
+      try { html = await (await fetch(assetUrl('overlays', template))).text(); }
+      catch { html = ''; }
+      this.overlayCache.set(template, html);
+    }
+    ov.innerHTML = html;
+    for (const [key, val] of Object.entries(slots)) {
+      const el = ov.querySelector(`[data-slot="${key}"]`);
+      if (el) el.textContent = val;
+    }
+  }
+
+  // ----------------------------------------------- character direction
+
+  forFrame(cue) {
+    const id = cue.frame || this.activeId;
+    if (cue.frame) this.activeId = id;
+    return this.ensureFrame(id).puppet;
+  }
+}
+
 // ------------------------------------------------------------- cue bus
 
-const puppet = new Puppet(document.getElementById('stage'));
+const $id = (i) => document.getElementById(i);
+
+const stage = new Stage($id('frames'), $id('overlays'));
+stage.ensureFrame('main'); // boots as one full-size frame + the default character
+
+function mainPuppet() {
+  const f = stage.frames.get('main');
+  return f && f.puppet;
+}
 
 function handleCue(cue) {
   switch (cue.type) {
-    case 'speak': puppet.speak(cue); break;
-    case 'action': puppet.act(cue.name); break;
-    case 'walk': puppet.walkTo(cue.x, cue.jump || cue.from); break;
-    case 'look': puppet.look(cue.dir); break;
-    case 'view': puppet.setView(cue.mode); break;
-    case 'character': loadCharacter(cue.name); break;
+    case 'frame': {
+      const f = stage.frame(cue);
+      if (cue.character) loadCharacter(cue.character, f.id, { view: cue.view, facing: cue.facing });
+      break;
+    }
+    case 'frame-clear': stage.frameClear(cue); break;
+    case 'layout': stage.layout(cue); break;
+    case 'content': stage.content(cue); break;
+    case 'content-clear': stage.contentClear(cue); break;
+    case 'scene': stage.scene(cue); break;
+    case 'overlay': stage.overlay(cue); break;
+    case 'overlay-clear': stage.overlayClear(cue); break;
+    case 'speak': { const p = stage.forFrame(cue); if (p) p.speak(cue); break; }
+    case 'action': { const p = stage.forFrame(cue); if (p) p.act(cue.name); break; }
+    case 'walk': { const p = stage.forFrame(cue); if (p) p.walkTo(cue.x, cue.jump || cue.from); break; }
+    case 'look': { const p = stage.forFrame(cue); if (p) p.look(cue.dir); break; }
+    case 'view': { const p = stage.forFrame(cue); if (p) p.setView(cue.mode); break; }
+    case 'character': {
+      const id = cue.frame || stage.activeId;
+      if (cue.frame) stage.activeId = id;
+      loadCharacter(cue.name, id);
+      break;
+    }
     case 'script-start': prompterStart(cue.lines); break;
     case 'script-line': prompterHighlight(cue.index); break;
     case 'script-end': prompterEnd(); break;
@@ -667,24 +1084,29 @@ function handleCue(cue) {
 const events = new EventSource('/api/events');
 events.onmessage = (e) => handleCue(JSON.parse(e.data));
 
-// Any user gesture unlocks/keeps-alive the audio context, so speech cues
-// arriving later over SSE are allowed to make sound (Safari autoplay policy).
-// Safari additionally keeps a context inaudible until a source node is
-// *started* inside a real gesture, so play one silent sample too.
-let audioUnlocked = false;
+// Any user gesture unlocks/keeps-alive every puppet's audio context, so
+// speech cues arriving later over SSE are allowed to make sound (Safari
+// autoplay policy). Safari additionally keeps a context inaudible until a
+// source node is *started* inside a real gesture, so play one silent sample
+// per context too.
+const unlockedCtxs = new WeakSet();
+function unlockAudio(p) {
+  if (!p) return;
+  const ctx = p.ensureCtx();
+  if (ctx.state !== 'running') ctx.resume().catch(() => {});
+  if (!unlockedCtxs.has(ctx)) {
+    try {
+      const src = ctx.createBufferSource();
+      src.buffer = ctx.createBuffer(1, 1, 22050);
+      src.connect(ctx.destination);
+      src.start(0);
+      unlockedCtxs.add(ctx);
+    } catch { /* retry on next gesture */ }
+  }
+}
 for (const ev of ['pointerdown', 'keydown']) {
   window.addEventListener(ev, () => {
-    const ctx = puppet.ensureCtx();
-    if (ctx.state !== 'running') ctx.resume().catch(() => {});
-    if (!audioUnlocked) {
-      try {
-        const src = ctx.createBufferSource();
-        src.buffer = ctx.createBuffer(1, 1, 22050);
-        src.connect(ctx.destination);
-        src.start(0);
-        audioUnlocked = true;
-      } catch { /* retry on next gesture */ }
-    }
+    for (const f of stage.frames.values()) if (f.puppet) unlockAudio(f.puppet);
   }, true);
 }
 
@@ -721,6 +1143,10 @@ function toast(msg) {
 }
 
 // ------------------------------------------------------------- controls
+//
+// The control panel always targets the "main" frame explicitly, exactly as
+// the single-puppet stage did before frames existed — it has no frame
+// picker, regardless of whatever frame a screenplay may have made active.
 
 async function post(url, body) {
   const r = await fetch(url, {
@@ -731,8 +1157,6 @@ async function post(url, body) {
   if (!r.ok) toast((await r.json()).error || 'request failed');
 }
 
-const $id = (i) => document.getElementById(i);
-
 $id('say-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const text = $id('say-text').value.trim();
@@ -741,6 +1165,7 @@ $id('say-form').addEventListener('submit', (e) => {
     text,
     engine: $id('engine').value,
     voice: $id('voice').value,
+    frame: 'main',
   });
 });
 
@@ -748,7 +1173,7 @@ $id('engine').addEventListener('change', loadVoices);
 
 // audio diagnostics: state readout + a beep through the same output path
 $id('beep').onclick = async () => {
-  const ctx = puppet.ensureCtx();
+  const ctx = mainPuppet().ensureCtx();
   await ctx.resume().catch(() => {});
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
@@ -760,7 +1185,8 @@ $id('beep').onclick = async () => {
   osc.stop(ctx.currentTime + 0.4);
 };
 setInterval(() => {
-  const c = puppet.audioCtx;
+  const p = mainPuppet();
+  const c = p && p.audioCtx;
   $id('audio-state').textContent = 'audio: ' + (c ? c.state : 'not started yet');
 }, 500);
 
@@ -781,39 +1207,45 @@ async function loadVoices() {
 function buildActionButtons() {
   const box = $id('actions');
   box.innerHTML = '';
-  for (const name of Object.keys(puppet.manifest.actions || {})) {
+  const p = mainPuppet();
+  for (const name of Object.keys((p.manifest || {}).actions || {})) {
     const b = document.createElement('button');
     b.textContent = name;
-    b.onclick = () => post('/api/cue', { type: 'action', name });
+    b.onclick = () => post('/api/cue', { type: 'action', name, frame: 'main' });
     box.appendChild(b);
   }
   for (const dir of ['left', 'front', 'right']) {
     const b = document.createElement('button');
     b.textContent = `look ${dir}`;
-    b.onclick = () => post('/api/cue', { type: 'look', dir });
+    b.onclick = () => post('/api/cue', { type: 'look', dir, frame: 'main' });
     box.appendChild(b);
   }
   for (const mode of ['face', 'body']) {
     const b = document.createElement('button');
     b.textContent = `🎥 ${mode}`;
-    b.onclick = () => post('/api/cue', { type: 'view', mode });
+    b.onclick = () => post('/api/cue', { type: 'view', mode, frame: 'main' });
     box.appendChild(b);
   }
 }
 
 $id('walk').addEventListener('change', (e) => {
-  post('/api/cue', { type: 'walk', x: parseInt(e.target.value, 10) });
+  post('/api/cue', { type: 'walk', x: parseInt(e.target.value, 10), frame: 'main' });
 });
 
 $id('run-script').onclick = () => post('/api/script', { script: $id('script').value });
 $id('stop-script').onclick = () => post('/api/script/stop', {});
 
-async function loadCharacter(name) {
-  await puppet.load(name);
+async function loadCharacter(name, frameId = 'main', extra = {}) {
+  const f = stage.ensureFrame(frameId);
+  await stage.loadCharacterInto(f, name);
+  if (extra.view) f.puppet.setView(extra.view, true);
+  if (extra.facing !== undefined) f.puppet.face(extra.facing);
+  if (frameId !== 'main') return;
+
   buildActionButtons();
   const sel = $id('character');
   if (sel.value !== name) sel.value = name;
-  const pref = puppet.manifest.voice;
+  const pref = f.puppet.manifest.voice;
   if (pref) {
     if (pref.engine) $id('engine').value = pref.engine;
     await loadVoices();
@@ -822,7 +1254,7 @@ async function loadCharacter(name) {
 }
 
 $id('character').addEventListener('change', (e) => {
-  post('/api/cue', { type: 'character', name: e.target.value });
+  post('/api/cue', { type: 'character', name: e.target.value, frame: 'main' });
 });
 
 // ---------------------------------------------------------------- boot
@@ -835,8 +1267,8 @@ $id('character').addEventListener('change', (e) => {
     o.value = o.textContent = c;
     sel.appendChild(o);
   }
-  await loadCharacter(characters[0]);
-  if (!puppet.manifest.voice) loadVoices();
+  await loadCharacter(characters[0], 'main');
+  if (!mainPuppet().manifest.voice) loadVoices();
   $id('script').value = [
     '# Screenplay: [direction] lines and spoken lines',
     '[enter from left]',

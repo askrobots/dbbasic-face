@@ -23,8 +23,22 @@ const ROOT = __dirname;
 const CACHE = path.join(ROOT, 'cache');
 const PUBLIC = path.join(ROOT, 'public');
 const CHARACTERS = path.join(ROOT, 'characters');
+const ASSETS = path.join(ROOT, 'assets');
 const RHUBARB = findRhubarb();
 const PORT = process.env.PORT || 3123;
+
+// Format-agnostic asset resolution: an asset id resolves to the first
+// existing file among a known extension set (SVG first, then raster), so
+// PNG/JPG/WebP/GIF drop into the same slots as SVG with no code change.
+const ASSET_EXTS = ['.svg', '.png', '.jpg', '.jpeg', '.webp', '.gif'];
+
+function resolveAsset(kind, id) {
+  for (const ext of ASSET_EXTS) {
+    const file = path.join(ASSETS, kind, id + ext);
+    if (fs.existsSync(file)) return file;
+  }
+  return null;
+}
 
 function findRhubarb() {
   if (process.env.RHUBARB_PATH) return process.env.RHUBARB_PATH;
@@ -219,39 +233,128 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // rough pacing estimates for sequencing; the browser animates the real thing
 const ACTION_SECONDS = { wave: 1.6, jump: 0.9, nod: 1.2, shake: 1.2, bow: 1.8, dance: 2.4 };
 
+// Layout presets: macros that clear existing frames and create the named
+// ones. Only the frame-id bookkeeping needed while parsing lives here — the
+// actual rect math is the client's job (public/stage.js).
+const LAYOUT_FRAMES = {
+  single: ['main'],
+  split: ['left', 'right'],
+  thirds: ['third-l', 'third-c', 'third-r'],
+  'pip-tr': ['main', 'pip'], 'pip-tl': ['main', 'pip'],
+  'pip-br': ['main', 'pip'], 'pip-bl': ['main', 'pip'],
+};
+
+// Tokenize `key:value key:"quoted value"` pairs, e.g. `character:ava bg:desk`.
+function parseKV(str) {
+  const out = {};
+  const re = /([a-z][\w-]*):("([^"]*)"|\S+)/gi;
+  let m;
+  while ((m = re.exec(str))) out[m[1].toLowerCase()] = m[3] !== undefined ? m[3] : m[2];
+  return out;
+}
+
 /**
  * Parse a screenplay into a cue list.
  *   [wave]                 → action cue
  *   [walk to 70]           → movement (percent of stage width)
  *   [look left|right|front], [emote happy], [wait 1.5]
  *   [engine espeak], [voice Samantha], [rate 180]  → speech settings
+ *   [layout split]         → frame layout preset
+ *   [frame left character:ava bg:desk view:face]   → create/update a frame
+ *   [frame right clear]   → remove a frame
+ *   [scene desk]           → set the active frame's background
+ *   [show image:chart fit:contain]  → content tile in the active frame
+ *   [lower-third "Ava Reyes" "Host"] → overlay
+ *   left: Good evening.    → speak cue targeting frame "left" (id must be
+ *                             a frame declared earlier in the script)
+ *   [left wave]            → direction targeting frame "left"
  *   (wave) Hello!          → action fired concurrently with the line
  *   Hello!                 → speech
  */
 function parseScript(src) {
   const cues = [];
+  const frameIds = new Set(['main']); // tracks declared frame ids as we go
   for (const rawLine of src.split('\n')) {
     const line = rawLine.trim();
     if (!line || line.startsWith('#')) continue;
 
-    const bracketed = [...line.matchAll(/^\s*\[([^\]]+)\]\s*/g)];
     if (/^(\[[^\]]+\]\s*)+$/.test(line)) {
-      for (const m of line.matchAll(/\[([^\]]+)\]/g)) cues.push(directionCue(m[1], line));
+      for (const m of line.matchAll(/\[([^\]]+)\]/g)) cues.push(directionCue(m[1], line, frameIds));
       continue;
     }
 
     let text = line;
+    let frame = null;
+    const speaker = text.match(/^([A-Za-z][\w-]*):\s*(.*)$/);
+    if (speaker && frameIds.has(speaker[1])) { frame = speaker[1]; text = speaker[2]; }
+
     let concurrent = null;
     const inline = text.match(/^\(([^)]+)\)\s*(.*)$/);
-    if (inline) { concurrent = directionCue(inline[1], line); text = inline[2]; }
-    cues.push({ type: 'speak', text, concurrent, source: line });
+    if (inline) {
+      concurrent = directionCue(inline[1], line, frameIds);
+      text = inline[2];
+      if (frame) concurrent.frame = frame;
+    }
+    const cue = { type: 'speak', text, concurrent, source: line };
+    if (frame) cue.frame = frame;
+    cues.push(cue);
   }
   return cues;
 }
 
-function directionCue(body, source) {
+function directionCue(body, source, frameIds) {
+  frameIds = frameIds || new Set(['main']);
   const parts = body.trim().split(/\s+/);
   const head = parts[0].toLowerCase();
+
+  if (head === 'layout') {
+    const preset = (parts[1] || 'single').toLowerCase();
+    const ids = LAYOUT_FRAMES[preset] || ['main'];
+    frameIds.clear();
+    for (const id of ids) frameIds.add(id);
+    return { type: 'layout', preset, source };
+  }
+
+  if (head === 'frame') {
+    const id = parts[1];
+    const restStr = parts.slice(2).join(' ');
+    if (/^clear\b/i.test(restStr)) {
+      frameIds.delete(id);
+      return { type: 'frame-clear', id, source };
+    }
+    const kv = parseKV(restStr);
+    const cue = { type: 'frame', id, source };
+    if (kv.slot) cue.slot = kv.slot;
+    if (kv.bg) cue.bg = kv.bg;
+    if (kv.character) cue.character = kv.character;
+    if (kv.view) cue.view = kv.view;
+    if (kv.facing !== undefined) cue.facing = parseInt(kv.facing, 10);
+    if (kv.rect) cue.rect = kv.rect.split(',').map(Number);
+    frameIds.add(id);
+    return cue;
+  }
+
+  if (head === 'scene') return { type: 'scene', bg: parts.slice(1).join(' '), source };
+
+  if (head === 'show') {
+    const kv = parseKV(parts.slice(1).join(' '));
+    let kind = 'text', value = '';
+    for (const k of ['text', 'image', 'video']) {
+      if (kv[k] !== undefined) { kind = k; value = kv[k]; break; }
+    }
+    const cue = { type: 'content', kind, value, source };
+    if (kv.fit) cue.fit = kv.fit;
+    return cue;
+  }
+
+  if (head === 'lower-third') {
+    const strs = [...body.matchAll(/"([^"]*)"/g)].map((m) => m[1]);
+    return {
+      type: 'overlay', template: 'lower-third',
+      slots: { title: strs[0] || '', subtitle: strs[1] || '' }, source,
+    };
+  }
+
   if (head === 'walk' || head === 'enter' || head === 'exit') {
     // [walk to 70] [enter from left] [exit right]
     const arg = parts[parts.length - 1].toLowerCase();
@@ -272,6 +375,15 @@ function directionCue(body, source) {
   if (head === 'engine' || head === 'voice' || head === 'rate') {
     return { type: 'setting', key: head, value: parts.slice(1).join(' '), source };
   }
+
+  // [<id> <direction...>] — first token is a known frame id: apply the rest
+  // of the direction to that frame.
+  if (frameIds.has(head) && parts.length > 1) {
+    const sub = directionCue(parts.slice(1).join(' '), source, frameIds);
+    sub.frame = head;
+    return sub;
+  }
+
   return { type: 'action', name: head, source };
 }
 
@@ -301,7 +413,9 @@ async function runScript(src) {
       }
       if (token !== scriptToken) break;
       if (cue.concurrent) broadcast(cue.concurrent);
-      broadcast({ type: 'speak', ...prepared });
+      const speakCue = { type: 'speak', ...prepared };
+      if (cue.frame) speakCue.frame = cue.frame;
+      broadcast(speakCue);
       await sleep(prepared.duration * 1000 + 300);
       continue;
     }
@@ -334,7 +448,9 @@ async function listVoices(engine) {
 const MIME = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
   '.json': 'application/json', '.svg': 'image/svg+xml', '.wav': 'audio/wav',
-  '.png': 'image/png',
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp', '.gif': 'image/gif',
+  '.mp4': 'video/mp4', '.webm': 'video/webm',
 };
 
 function serveFile(res, filePath) {
@@ -368,7 +484,9 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       if (!body.text) return json(res, 400, { error: 'text required' });
       const prepared = await prepareSpeech(body);
-      broadcast({ type: 'speak', ...prepared });
+      const cue = { type: 'speak', ...prepared };
+      if (body.frame) cue.frame = body.frame;
+      broadcast(cue);
       return json(res, 200, prepared);
     }
 
@@ -420,12 +538,27 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // GET /api/asset/<kind>/<id> → the resolved file (first existing
+    // extension among svg/png/jpg/jpeg/webp/gif), so the client can learn
+    // which format exists without guessing.
+    if (p.startsWith('/api/asset/')) {
+      const [kind, id] = p.slice('/api/asset/'.length).split('/');
+      const file = kind && id ? resolveAsset(kind, id) : null;
+      if (!file) return json(res, 404, { error: 'asset not found' });
+      return serveFile(res, file);
+    }
+
     // static routes
     if (p.startsWith('/audio/')) return serveFile(res, path.join(CACHE, path.basename(p)));
     if (p.startsWith('/characters/')) {
       const rel = path.normalize(p.slice('/characters/'.length));
       if (rel.startsWith('..')) { res.writeHead(403); return res.end(); }
       return serveFile(res, path.join(CHARACTERS, rel));
+    }
+    if (p.startsWith('/assets/')) {
+      const rel = path.normalize(p.slice('/assets/'.length));
+      if (rel.startsWith('..')) { res.writeHead(403); return res.end(); }
+      return serveFile(res, path.join(ASSETS, rel));
     }
     const file = p === '/' ? 'index.html' : path.normalize(p).replace(/^\/+/, '');
     if (file.startsWith('..')) { res.writeHead(403); return res.end(); }

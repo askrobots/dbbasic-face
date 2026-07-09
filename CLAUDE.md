@@ -9,12 +9,20 @@ code and the invariants that are easy to break.
 - `server.js` — the whole backend, zero npm deps. TTS rendering + Rhubarb
   viseme extraction (`prepareSpeech`, `prepareExternalAudio`), screenplay
   parser/runner (`parseScript`, `runScript`), SSE cue broadcast, static files.
-- `public/stage.js` — the whole frontend runtime. `Puppet` class (mouth
-  shapes, actions, walking, camera views, idle breathing/gaze/blink, Web
-  Audio speech playback) + cue handling + control-panel wiring.
+- `public/stage.js` — the whole frontend runtime. `Puppet` is now per-frame
+  (mouth shapes, actions, walking, camera views, idle breathing/gaze/blink,
+  Web Audio speech playback); a `Stage` manager owns the map of frames and
+  routes cues by `cue.frame`. Stage boots one implicit `main` frame (slot
+  `full`, default character) so existing behavior is unchanged when no
+  `frame` cue is ever sent. See `docs/design/frames-and-scenes.md`.
 - `public/index.html` — layout and CSS only, no logic beyond the `?shot` hook.
 - `characters/<name>/{puppet.svg, manifest.json}` — data-only characters.
-  `pip` is the minimal example, `ava` exercises every manifest feature.
+  `pip` is the minimal example, `ava` exercises every manifest feature, `bo`
+  is a second (vintage rubber-hose-style) character for two-frame scenes.
+- `assets/{backgrounds,props,overlays}/<id>.<ext>` — non-character assets,
+  served like `characters/`. An id resolves format-agnostically (`.svg`
+  first, then raster) so an AI-generated PNG drops into the same slot as a
+  hand-authored SVG with no code change.
 - `cache/` — generated audio + viseme JSON, keyed by content hash. Disposable.
 - `tools/` — Rhubarb binary, installed by `setup.sh`. Both gitignored.
 - `integrations/dbbasic/` — the app packaged for dbbasic-object-server
@@ -23,6 +31,9 @@ code and the invariants that are easy to break.
   hand, and re-run `build.py` after frontend/character changes.
   NOTE: test the package against a throwaway clone of the object server —
   never a live or shared checkout you don't own.
+- The screenplay grammar (including frame/scene/overlay directions) lives in
+  BOTH `server.js` (`parseScript` / `directionCue`) and
+  `integrations/dbbasic/shim.js`. Keep them in sync, then re-run `build.py`.
 
 ## Integration points (in order of preference)
 

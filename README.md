@@ -147,6 +147,43 @@ The nine visemes are Rhubarb's standard set: **A** closed (m/b/p), **B**
 slightly open with teeth, **C** open, **D** wide open, **E** rounded, **F**
 puckered (oo), **G** teeth on lip (f/v), **H** tongue up (l), **X** rest.
 
+## Scenes, frames & overlays
+
+The stage isn't limited to one character in one box. A **frame** is an
+independent framed region with its own background, content, character, and
+camera; the screen holds one or more of them side by side (a news two-box, an
+interview, picture-in-picture). A single talking head is just one frame at
+full size — the default — so every existing script and API call keeps
+working unchanged.
+
+![Two framed characters with a lower-third](docs/scenes.png)
+*Ava and a vintage rubber-hose-style character, Bo, framed separately with different backgrounds and a broadcast lower-third.*
+
+```text
+[layout split]
+[frame left character:ava bg:desk view:face]
+[frame right character:bo bg:room view:face]
+left: Good evening.
+right: Thanks for having me.
+[left wave]
+[scene desk]
+[show image:chart fit:contain]
+[lower-third "Ava Reyes" "Host"]
+```
+
+`left:` / `right:` as a line prefix targets that frame's speaker; a
+`[frame ...]` direction creates or updates a frame. New cue types for API
+users: `frame`, `frame-clear`, `layout`, `content`, `scene`, `overlay` —
+existing character cues (`speak`, `action`, `walk`, `look`, `view`,
+`character`) now also accept an optional `frame` field.
+
+A starter asset pack ships in `assets/`: backgrounds `desk`, `sky`, and
+`room`, a few props, and the `lower-third` overlay template, plus a second
+character, `bo`, in a vintage rubber-hose style. See
+[docs/authoring-assets.md](docs/authoring-assets.md) for adding your own, and
+[docs/design/frames-and-scenes.md](docs/design/frames-and-scenes.md) for the
+full cue schema and screenplay grammar.
+
 ## Notes & troubleshooting
 
 - **Safari and sound.** Browsers block audio that isn't triggered by a click,

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180">
+  <!-- back wall -->
+  <rect x="0" y="0" width="320" height="132" fill="#e4dccb"/>
+  <!-- floor -->
+  <rect x="0" y="132" width="320" height="48" fill="#c8a877"/>
+  <!-- floor line -->
+  <rect x="0" y="130" width="320" height="4" fill="#a9895e"/>
+  <!-- simple plank seams on the floor -->
+  <rect x="70" y="132" width="2" height="48" fill="#b3925f" opacity="0.5"/>
+  <rect x="160" y="132" width="2" height="48" fill="#b3925f" opacity="0.5"/>
+  <rect x="250" y="132" width="2" height="48" fill="#b3925f" opacity="0.5"/>
+  <!-- window -->
+  <rect x="216" y="26" width="70" height="80" rx="2" fill="#bfe0ea" stroke="#8a7a5c" stroke-width="4"/>
+  <rect x="249" y="26" width="4" height="80" fill="#8a7a5c"/>
+  <rect x="216" y="64" width="70" height="4" fill="#8a7a5c"/>
+</svg>

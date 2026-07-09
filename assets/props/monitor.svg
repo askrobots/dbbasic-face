@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- screen bezel -->
+  <rect x="10" y="14" width="80" height="52" rx="4" fill="#2b2f38"/>
+  <!-- screen -->
+  <rect x="17" y="20" width="66" height="40" fill="#7fd0e0"/>
+  <!-- stand neck -->
+  <rect x="45" y="66" width="10" height="14" fill="#2b2f38"/>
+  <!-- base -->
+  <rect x="30" y="80" width="40" height="8" rx="3" fill="#2b2f38"/>
+</svg>
