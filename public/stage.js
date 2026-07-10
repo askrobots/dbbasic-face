@@ -77,9 +77,10 @@ class Puppet {
     const svgText = await (await fetch(base + this.manifest.svg)).text();
     this.flip.innerHTML = svgText;
     const svg = this.flip.querySelector('svg');
-    svg.style.height = (this.manifest.height || 300) + 'px';
+    this.svg = svg;
     svg.style.width = 'auto';
     svg.style.overflow = 'visible';
+    this.applyScale();
 
     this.mouthEls = {};
     for (const [shape, sel] of Object.entries(this.manifest.mouths || {})) {
@@ -90,6 +91,19 @@ class Puppet {
     this.startBlinking();
     this.startIdle();
     requestAnimationFrame(() => this.setView(this.view, true));
+  }
+
+  // manifest.height is a DESIGN height authored against a 720px-tall stage;
+  // rendering it at that literal pixel size made a character overflow (or
+  // shrink to nothing in) its frame whenever the frame wasn't 720px tall —
+  // e.g. any browser resize, or a split/thirds layout. Scaling it by the
+  // frame's actual height keeps the character the same PROPORTION of its
+  // frame at any size.
+  applyScale() {
+    if (!this.svg) return;
+    const designH = (this.manifest && this.manifest.height) || 300;
+    const frameH = this.stage.clientHeight || 720;
+    this.svg.style.height = Math.max(60, designH * (frameH / 720)) + 'px';
   }
 
   $(sel) { return this.flip.querySelector(sel); }
@@ -420,6 +434,20 @@ class Stage {
     f.el.style.top = r[1] + '%';
     f.el.style.width = r[2] + '%';
     f.el.style.height = r[3] + '%';
+    this.rescaleFrame(f); // rect changed -> frame's pixel height likely changed too
+  }
+
+  // Recompute one frame's puppet scale (see Puppet.applyScale) and, if it's
+  // holding a face close-up, re-frame it so the shot doesn't drift once the
+  // underlying height has changed. Safe to call on a frame with no puppet.
+  rescaleFrame(f) {
+    if (!f.puppet) return;
+    f.puppet.applyScale();
+    if (f.puppet.view === 'face') f.puppet.setView('face', true);
+  }
+
+  rescaleAll() {
+    for (const f of this.frames.values()) this.rescaleFrame(f);
   }
 
   autoSlot() {
@@ -700,10 +728,11 @@ function handleCue(cue) {
     case 'frame': {
       const f = stage.frame(cue);
       if (cue.character) loadCharacter(cue.character, f.id, { view: cue.view, facing: cue.facing });
+      syncFrameTargets();
       break;
     }
-    case 'frame-clear': stage.frameClear(cue); break;
-    case 'layout': stage.layout(cue); break;
+    case 'frame-clear': stage.frameClear(cue); syncFrameTargets(); break;
+    case 'layout': stage.layout(cue); syncFrameTargets(); break;
     case 'content': stage.content(cue); break;
     case 'content-clear': stage.contentClear(cue); break;
     case 'scene': stage.scene(cue); break;
@@ -766,6 +795,16 @@ for (const ev of ['pointerdown', 'keydown']) {
   }, true);
 }
 
+// Puppet height is proportional to its frame's height (see
+// Puppet.applyScale), so a browser resize can change every frame's pixel
+// size at once even though no rect ever changed. Lightly debounced since
+// 'resize' can fire in a burst while the window is being dragged.
+let resizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => stage.rescaleAll(), 100);
+});
+
 // --------------------------------------------------------- teleprompter
 
 const prompter = document.getElementById('prompter');
@@ -800,9 +839,13 @@ function toast(msg) {
 
 // ------------------------------------------------------------- controls
 //
-// The control panel always targets the "main" frame explicitly, exactly as
-// the single-puppet stage did before frames existed — it has no frame
-// picker, regardless of whatever frame a screenplay may have made active.
+// With one frame the panel targets it exactly as the single-puppet stage
+// did before frames existed. Once a screenplay (or the layout buttons)
+// splits the stage into more than one frame, a chip row (#frame-target)
+// lets the user pick which frame every panel-originated cue targets;
+// `targetFrame` is the source of truth and defaults to 'main'.
+
+let targetFrame = 'main';
 
 async function post(url, body) {
   const r = await fetch(url, {
@@ -821,7 +864,7 @@ $id('say-form').addEventListener('submit', (e) => {
     text,
     engine: $id('engine').value,
     voice: $id('voice').value,
-    frame: 'main',
+    frame: targetFrame,
   });
 });
 
@@ -860,32 +903,37 @@ async function loadVoices() {
   } catch { /* voice list is a nicety */ }
 }
 
+function targetPuppet() {
+  const f = stage.frames.get(targetFrame);
+  return f && f.puppet;
+}
+
 function buildActionButtons() {
   const box = $id('actions');
   box.innerHTML = '';
-  const p = mainPuppet();
-  for (const name of Object.keys((p.manifest || {}).actions || {})) {
+  const p = targetPuppet();
+  for (const name of Object.keys((p && p.manifest || {}).actions || {})) {
     const b = document.createElement('button');
     b.textContent = name;
-    b.onclick = () => post('/api/cue', { type: 'action', name, frame: 'main' });
+    b.onclick = () => post('/api/cue', { type: 'action', name, frame: targetFrame });
     box.appendChild(b);
   }
   for (const dir of ['left', 'front', 'right']) {
     const b = document.createElement('button');
     b.textContent = `look ${dir}`;
-    b.onclick = () => post('/api/cue', { type: 'look', dir, frame: 'main' });
+    b.onclick = () => post('/api/cue', { type: 'look', dir, frame: targetFrame });
     box.appendChild(b);
   }
   for (const mode of ['face', 'body']) {
     const b = document.createElement('button');
     b.textContent = `🎥 ${mode}`;
-    b.onclick = () => post('/api/cue', { type: 'view', mode, frame: 'main' });
+    b.onclick = () => post('/api/cue', { type: 'view', mode, frame: targetFrame });
     box.appendChild(b);
   }
 }
 
 $id('walk').addEventListener('change', (e) => {
-  post('/api/cue', { type: 'walk', x: parseInt(e.target.value, 10), frame: 'main' });
+  post('/api/cue', { type: 'walk', x: parseInt(e.target.value, 10), frame: targetFrame });
 });
 
 // -------------------------------------------------------------- scene
@@ -959,31 +1007,80 @@ $id('run-script').onclick = () => {
 };
 $id('stop-script').onclick = () => post('/api/script/stop', {});
 
+// Applies a puppet's manifest-declared voice preference (engine + voice) to
+// the engine/voice selects, refreshing the voice list in between so the
+// preferred voice is actually a valid option by the time it's set. Shared
+// between loadCharacter and the frame-target chip click handler.
+async function applyVoicePref(puppet) {
+  const pref = puppet && puppet.manifest && puppet.manifest.voice;
+  if (!pref) return;
+  if (pref.engine) $id('engine').value = pref.engine;
+  await loadVoices();
+  if (pref.voice) $id('voice').value = pref.voice;
+}
+
 async function loadCharacter(name, frameId = 'main', extra = {}) {
   const f = stage.ensureFrame(frameId);
   await stage.loadCharacterInto(f, name);
   if (extra.view) f.puppet.setView(extra.view, true);
   if (extra.facing !== undefined) f.puppet.face(extra.facing);
-  if (frameId !== 'main') return;
+  if (frameId !== targetFrame) return;
 
   buildActionButtons();
   const sel = $id('character');
   if (sel.value !== name) sel.value = name;
-  const pref = f.puppet.manifest.voice;
-  if (pref) {
-    if (pref.engine) $id('engine').value = pref.engine;
-    await loadVoices();
-    if (pref.voice) $id('voice').value = pref.voice;
-  }
+  await applyVoicePref(f.puppet);
 }
 
 $id('character').addEventListener('change', (e) => {
-  post('/api/cue', { type: 'character', name: e.target.value, frame: 'main' });
+  post('/api/cue', { type: 'character', name: e.target.value, frame: targetFrame });
 });
+
+// -------------------------------------------------------- frame targeting
+//
+// Only shown once a screenplay (or the layout buttons) creates more than
+// one frame; with a single frame it stays hidden and targetFrame tracks
+// that lone frame's id, exactly like the pre-frames single-puppet stage.
+
+function syncFrameTargets() {
+  const row = $id('frame-target');
+  const ids = [...stage.frames.keys()];
+  if (!stage.frames.has(targetFrame)) {
+    targetFrame = stage.frames.has(stage.activeId) ? stage.activeId : (ids[0] || 'main');
+  }
+  if (ids.length <= 1) {
+    targetFrame = ids[0] || 'main';
+    row.style.display = 'none';
+    row.innerHTML = '';
+    return;
+  }
+  row.style.display = '';
+  row.innerHTML = '';
+  for (const id of ids) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = id;
+    if (id === targetFrame) b.classList.add('sel');
+    b.onclick = () => selectTargetFrame(id);
+    row.appendChild(b);
+  }
+}
+
+async function selectTargetFrame(id) {
+  targetFrame = id;
+  syncFrameTargets();
+  const f = stage.frames.get(id);
+  const p = f && f.puppet;
+  const sel = $id('character');
+  sel.value = (p && p.characterName) || ''; // silent: no change event dispatched
+  buildActionButtons();
+  await applyVoicePref(p);
+}
 
 // ---------------------------------------------------------------- boot
 
 (async function init() {
+  syncFrameTargets(); // boots as one frame ('main'): chip row starts hidden
   const { characters } = await (await fetch('/api/characters')).json();
   const sel = $id('character');
   for (const c of characters) {
