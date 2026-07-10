@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180">
+  <!-- wall base -->
+  <rect x="0" y="0" width="320" height="180" fill="#ddc9a3"/>
+
+  <!-- striped canvas ceiling wedges, converging upward to an apex above the frame -->
+  <g id="tent-stripes">
+    <path d="M160,-40 L0,55 L40,55 Z" fill="#a8362f" opacity="0.85"/>
+    <path d="M160,-40 L40,55 L80,55 Z" fill="#e8d9b8"/>
+    <path d="M160,-40 L80,55 L120,55 Z" fill="#a8362f" opacity="0.85"/>
+    <path d="M160,-40 L120,55 L160,55 Z" fill="#e8d9b8"/>
+    <path d="M160,-40 L160,55 L200,55 Z" fill="#a8362f" opacity="0.85"/>
+    <path d="M160,-40 L200,55 L240,55 Z" fill="#e8d9b8"/>
+    <path d="M160,-40 L240,55 L280,55 Z" fill="#a8362f" opacity="0.85"/>
+    <path d="M160,-40 L280,55 L320,55 Z" fill="#e8d9b8"/>
+  </g>
+  <rect x="0" y="52" width="320" height="4" fill="#8a6a3f" opacity="0.5"/>
+
+  <!-- string lights along the wall/ceiling seam -->
+  <g id="lights">
+    <path d="M4,58 Q160,74 316,58" stroke="#5c4327" stroke-width="1.5" fill="none" opacity="0.6"/>
+    <circle cx="30" cy="60" r="3" fill="#f4d35e"/>
+    <circle cx="70" cy="65" r="3" fill="#f4d35e"/>
+    <circle cx="110" cy="69" r="3" fill="#f4d35e"/>
+    <circle cx="160" cy="71" r="3" fill="#f4d35e"/>
+    <circle cx="210" cy="69" r="3" fill="#f4d35e"/>
+    <circle cx="250" cy="65" r="3" fill="#f4d35e"/>
+    <circle cx="290" cy="60" r="3" fill="#f4d35e"/>
+  </g>
+
+  <!-- calm middle third: plain wall, no busy pattern behind the character -->
+  <rect x="0" y="62" width="320" height="78" fill="#ddc9a3"/>
+  <rect x="0" y="62" width="320" height="3" fill="#c9b083" opacity="0.5"/>
+
+  <!-- ring-edge floor band -->
+  <rect x="0" y="140" width="320" height="40" fill="#5c2a24"/>
+  <rect x="0" y="140" width="320" height="6" fill="#7a3a2f"/>
+  <ellipse cx="160" cy="180" rx="220" ry="26" fill="#4a2019" opacity="0.55"/>
+</svg>

@@ -47,6 +47,17 @@
   .frame-flip { transform-origin: 50% 100%; }
   .frame-flip svg { display: block; filter: drop-shadow(0 14px 10px rgba(0,0,0,.35)); }
 
+  /* ---- actors: placed props/characters in addition to the primary ---- */
+  .frame-actor { position: absolute; inset: 0; pointer-events: none; }
+  .prop-actor {
+    position: absolute; bottom: 9%; left: 50%; transform: translateX(-50%);
+    pointer-events: none;
+  }
+  .prop-actor svg, .prop-actor img {
+    height: 100%; width: auto; display: block;
+    filter: drop-shadow(0 10px 8px rgba(0,0,0,.3));
+  }
+
   /* ---- overlays: above all frames, spans the whole broadcast */
   #overlays { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
   .overlay {

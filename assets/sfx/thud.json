@@ -1,0 +1,13 @@
+{
+  "tempo": 100,
+  "loop": false,
+  "tracks": [
+    {
+      "wave": "triangle",
+      "gain": 0.28,
+      "notes": [
+        [0, 28, 0.2]
+      ]
+    }
+  ]
+}

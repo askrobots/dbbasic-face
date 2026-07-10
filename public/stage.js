@@ -8,6 +8,12 @@ function looksLikeUrl(v) {
 
 function assetUrl(kind, id) { return `/api/asset/${kind}/${id}`; }
 
+// Design-height reference for prop actors, matching the same 720-design
+// scaling rule characters use (Puppet.applyScale): a full-height character
+// reads around 600px tall in the 720-tall design, so a prop `scale: 0.3`
+// (against this same reference) lands knee-high.
+const PROP_DESIGN_HEIGHT = 600;
+
 // Named slots resolve to stage-percent rects [x, y, w, h]. `rect:` on a
 // frame cue overrides `slot:` entirely.
 const SLOTS = {
@@ -68,6 +74,9 @@ class Puppet {
     this.cam = { tx: 0, ty: 0, s: 1 };
     this.breathAnim = null;
     this.gazeTimer = null;
+    this.actorScale = 1;         // extra multiplier for actor instances (place cue's scale:)
+    this.wornProps = new Map();  // anchor name -> the <g class="worn"> element pinned there
+    this.ducking = false;        // true while this puppet holds a musicEngine.duck() (paired with unduck() in stopSpeaking)
   }
 
   async load(name) {
@@ -103,7 +112,7 @@ class Puppet {
     if (!this.svg) return;
     const designH = (this.manifest && this.manifest.height) || 300;
     const frameH = this.stage.clientHeight || 720;
-    this.svg.style.height = Math.max(60, designH * (frameH / 720)) + 'px';
+    this.svg.style.height = Math.max(60, designH * this.actorScale * (frameH / 720)) + 'px';
   }
 
   $(sel) { return this.flip.querySelector(sel); }
@@ -180,6 +189,8 @@ class Puppet {
     await new Promise((resolve) => {
       src.onended = resolve;
       src.start();
+      this.ducking = true;
+      if (musicEngine) musicEngine.duck();
       this.lipLoop = requestAnimationFrame(tick);
     });
     if (this.source === src) this.stopSpeaking();
@@ -189,6 +200,7 @@ class Puppet {
     if (this.lipLoop) cancelAnimationFrame(this.lipLoop);
     this.lipLoop = null;
     if (this.source) { try { this.source.stop(); } catch { /* already stopped */ } this.source = null; }
+    if (this.ducking) { this.ducking = false; if (musicEngine) musicEngine.unduck(); }
     if (this.manifest) this.setMouth(this.manifest.restMouth || 'X');
   }
 
@@ -372,6 +384,71 @@ class Puppet {
     };
     this.blinkTimer = setTimeout(blink, 1500);
   }
+
+  // ----------------------------------------------------------- wearables
+  //
+  // A worn prop is a <g class="worn"> injected as a following sibling of
+  // the anchor element, so it inherits that element's parent transforms
+  // (head bobs/nods) automatically. Placement: bottom-center of the prop
+  // sits at top-center of the anchor's bbox; width = anchor bbox width x
+  // the wear's scale (default 1); height keeps the prop's own aspect via
+  // its viewBox. Stored per anchor so a second wear on the same anchor
+  // replaces the first.
+
+  async wear(anchor, propId, scale = 1) {
+    const anchorSel = (this.manifest.anchors && this.manifest.anchors[anchor]) || '#head';
+    const anchorEl = this.$(anchorSel);
+    if (!anchorEl) { toast(`wear: no anchor "${anchor}" on ${this.characterName}`); return; }
+
+    let res;
+    try {
+      res = await fetch(assetUrl('props', propId));
+      if (!res.ok) throw new Error('missing asset');
+    } catch {
+      toast(`wear: missing prop "${propId}"`);
+      return;
+    }
+    const ctype = res.headers.get('content-type') || '';
+    if (!ctype.includes('svg')) {
+      toast(`wear: prop "${propId}" isn't vector art (wearables need SVG)`);
+      return;
+    }
+    const svgText = await res.text();
+    const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+    const propSvg = doc.documentElement;
+    if (!propSvg || propSvg.nodeName !== 'svg' || doc.querySelector('parsererror')) {
+      toast(`wear: invalid prop asset "${propId}"`);
+      return;
+    }
+
+    const vbParts = (propSvg.getAttribute('viewBox') || '').trim().split(/\s+/).map(Number);
+    const hasVb = vbParts.length === 4 && vbParts.every((n) => !isNaN(n));
+    const [vbX, vbY, vbW, vbH] = hasVb ? vbParts
+      : [0, 0, parseFloat(propSvg.getAttribute('width')) || 100, parseFloat(propSvg.getAttribute('height')) || 100];
+
+    const bbox = anchorEl.getBBox();
+    const width = bbox.width * scale;
+    const height = vbW ? width * (vbH / vbW) : width;
+    const px = bbox.x + bbox.width / 2 - width / 2; // bottom-center of prop = top-center of anchor
+    const py = bbox.y - height;
+    const k = vbW ? width / vbW : 1;
+
+    const ns = 'http://www.w3.org/2000/svg';
+    const g = document.createElementNS(ns, 'g');
+    g.setAttribute('class', 'worn');
+    g.dataset.anchor = anchor;
+    g.setAttribute('transform', `translate(${px}, ${py}) scale(${k}) translate(${-vbX}, ${-vbY})`);
+    for (const child of [...propSvg.children]) g.appendChild(document.importNode(child, true));
+
+    this.unwear(anchor); // second wear on the same anchor replaces
+    anchorEl.parentNode.insertBefore(g, anchorEl.nextSibling);
+    this.wornProps.set(anchor, g);
+  }
+
+  unwear(anchor) {
+    const g = this.wornProps.get(anchor);
+    if (g) { g.remove(); this.wornProps.delete(anchor); }
+  }
 }
 
 // ---------------------------------------------------------------- Stage
@@ -422,6 +499,7 @@ class Stage {
       bgEl: el.querySelector('.frame-bg'),
       contentEl: el.querySelector('.frame-content'),
       puppet: null,
+      actors: new Map(), // actor id -> { id, what, kind: 'character'|'prop', x, scale, behind, el, puppet }
     };
     this.frames.set(id, f);
     this.setRect(f, 'full');
@@ -441,9 +519,18 @@ class Stage {
   // holding a face close-up, re-frame it so the shot doesn't drift once the
   // underlying height has changed. Safe to call on a frame with no puppet.
   rescaleFrame(f) {
-    if (!f.puppet) return;
-    f.puppet.applyScale();
-    if (f.puppet.view === 'face') f.puppet.setView('face', true);
+    if (f.puppet) {
+      f.puppet.applyScale();
+      if (f.puppet.view === 'face') f.puppet.setView('face', true);
+    }
+    for (const a of f.actors.values()) {
+      if (a.puppet) {
+        a.puppet.applyScale();
+        if (a.puppet.view === 'face') a.puppet.setView('face', true);
+      } else if (a.kind === 'prop') {
+        this.applyPropScale(f, a);
+      }
+    }
   }
 
   rescaleAll() {
@@ -483,6 +570,7 @@ class Stage {
     const f = this.frames.get(cue.id);
     if (!f) return;
     if (f.puppet) f.puppet.stopSpeaking();
+    for (const a of f.actors.values()) if (a.puppet) a.puppet.stopSpeaking();
     f.el.remove();
     this.frames.delete(cue.id);
     if (this.activeId === cue.id) {
@@ -496,7 +584,11 @@ class Stage {
     const mainF = this.frames.get('main');
     const keepChar = mainF && mainF.puppet ? mainF.puppet.characterName : null;
 
-    for (const f of this.frames.values()) { if (f.puppet) f.puppet.stopSpeaking(); f.el.remove(); }
+    for (const f of this.frames.values()) {
+      if (f.puppet) f.puppet.stopSpeaking();
+      for (const a of f.actors.values()) if (a.puppet) a.puppet.stopSpeaking();
+      f.el.remove();
+    }
     this.frames.clear();
     this.autoIdx = 0;
 
@@ -575,6 +667,230 @@ class Stage {
         f.bgEl.style.background = `center / cover no-repeat url("${res.url}")`;
       }
     } catch { /* asset pack may not have this id yet; leave background as-is */ }
+  }
+
+  // ------------------------------------------------------------- actors
+  //
+  // An actor is a placed entity in a frame in addition to its primary
+  // character: either a character instance (a full Puppet bound to its own
+  // DOM subtree, sibling to the primary's) or a prop instance (a plain
+  // positioned element holding the resolved asset). Both stand on the same
+  // floor line as the primary, positioned by x% (center-anchored), sized by
+  // scale. z-order: appended after the primary (in front) unless `behind`.
+
+  place(cue) {
+    const frameId = cue.frame || this.activeId;
+    if (cue.frame) this.activeId = frameId;
+    this.placeActor(this.ensureFrame(frameId), cue);
+  }
+
+  async placeActor(f, cue) {
+    const id = cue.id || cue.what;
+    const existing = f.actors.get(id);
+    const x = cue.x !== undefined && !isNaN(cue.x) ? cue.x : undefined;
+
+    if (existing && existing.what === cue.what) {
+      // Same id + same `what`: update in place (x/scale glide via transition).
+      if (x !== undefined) {
+        existing.x = x;
+        if (existing.kind === 'character' && existing.puppet) existing.puppet.setX(x, 600);
+        else this.moveActor(existing, x);
+      }
+      if (cue.scale !== undefined) {
+        existing.scale = cue.scale;
+        if (existing.kind === 'character' && existing.puppet) {
+          const svg = existing.puppet.svg;
+          existing.puppet.actorScale = cue.scale;
+          if (svg) { svg.style.transition = 'height 600ms ease'; existing.puppet.applyScale(); }
+        } else {
+          this.scaleActor(existing, cue.scale);
+        }
+      }
+      if (cue.behind !== undefined && cue.behind !== existing.behind) {
+        existing.behind = cue.behind;
+        this.insertActorEl(f, existing);
+      }
+      return;
+    }
+    if (existing) this.destroyActor(f, existing); // different `what` at the same id: replace
+
+    const isCharacter = await this.probeCharacter(cue.what);
+    const actor = {
+      id, what: cue.what, kind: isCharacter ? 'character' : 'prop',
+      x: x !== undefined ? x : 50,
+      scale: cue.scale !== undefined ? cue.scale : (isCharacter ? 1 : 0.4),
+      behind: !!cue.behind,
+      frameId: f.id, el: null, puppet: null,
+    };
+    f.actors.set(id, actor);
+
+    if (actor.kind === 'character') {
+      const wrap = document.createElement('div');
+      wrap.className = 'frame-actor';
+      wrap.dataset.id = id;
+      wrap.innerHTML = '<div class="frame-camera"><div class="frame-pos"><div class="frame-flip"></div></div></div>';
+      actor.el = wrap;
+      this.insertActorEl(f, actor);
+      const puppet = new Puppet(wrap);
+      puppet.actorScale = actor.scale;
+      actor.puppet = puppet;
+      await puppet.load(cue.what);
+      puppet.setX(actor.x, 0);
+    } else {
+      const wrap = document.createElement('div');
+      wrap.className = 'prop-actor';
+      wrap.dataset.id = id;
+      actor.el = wrap;
+      this.insertActorEl(f, actor);
+      wrap.style.left = actor.x + '%';
+      this.applyPropScale(f, actor);
+      await this.loadPropAsset(actor, cue.what);
+    }
+  }
+
+  // Resolves whether `what` names a character (a rig, direction-capable) or
+  // a prop asset, the same way loading a character into a frame does —
+  // fetch its manifest and see if the server (or the dbbasic shim) has it.
+  async probeCharacter(what) {
+    try {
+      const r = await fetch(`/characters/${what}/manifest.json`);
+      return r.ok;
+    } catch { return false; }
+  }
+
+  insertActorEl(f, actor) {
+    const primaryCam = f.el.querySelector(':scope > .frame-camera');
+    if (actor.behind && primaryCam) f.el.insertBefore(actor.el, primaryCam);
+    else f.el.appendChild(actor.el);
+  }
+
+  applyPropScale(f, actor) {
+    const frameH = f.el.clientHeight || 720;
+    const h = Math.max(20, PROP_DESIGN_HEIGHT * actor.scale * (frameH / 720));
+    actor.el.style.height = h + 'px';
+  }
+
+  async loadPropAsset(actor, propId) {
+    try {
+      const res = await fetch(assetUrl('props', propId));
+      if (!res.ok) throw new Error('missing asset');
+      const ctype = res.headers.get('content-type') || '';
+      if (ctype.includes('svg')) {
+        actor.el.innerHTML = await res.text();
+      } else {
+        const img = document.createElement('img');
+        img.src = res.url;
+        actor.el.appendChild(img);
+      }
+    } catch {
+      toast(`place: missing prop asset "${propId}"`);
+      // Leave a visible placeholder so the id/scale/x is still legible on
+      // stage instead of silently rendering nothing.
+      actor.el.style.background = 'rgba(255,255,255,.12)';
+      actor.el.style.border = '1px dashed rgba(255,255,255,.4)';
+      actor.el.style.minWidth = '0.6em';
+    }
+  }
+
+  removeActor(cue) {
+    const target = cue.frame ? this.frames.get(cue.frame) : null;
+    let f = target, actor = f && f.actors.get(cue.id);
+    if (!actor) { // no explicit frame, or not found there: search every frame
+      for (const cand of this.frames.values()) {
+        if (cand.actors.has(cue.id)) { f = cand; actor = cand.actors.get(cue.id); break; }
+      }
+    }
+    if (!actor) return;
+    this.destroyActor(f, actor);
+  }
+
+  destroyActor(f, actor) {
+    if (actor.puppet) actor.puppet.stopSpeaking();
+    actor.el.remove();
+    f.actors.delete(actor.id);
+  }
+
+  // Resolves the actor named by cue.actor, scoped to cue.frame (or the
+  // active frame) first; if no frame was explicitly given, falls back to a
+  // search across every frame (actor ids are typically unique stage-wide).
+  resolveActor(cue) {
+    const frameId = cue.frame || this.activeId;
+    if (cue.frame) this.activeId = frameId;
+    const f = this.frames.get(frameId);
+    let actor = f && f.actors.get(cue.actor);
+    if (!actor && !cue.frame) {
+      for (const cand of this.frames.values()) {
+        if (cand.actors.has(cue.actor)) { actor = cand.actors.get(cue.actor); break; }
+      }
+    }
+    return actor;
+  }
+
+  // ---------------------------------------------------- prop directions
+  //
+  // [<id> move N] / [<id> scale N] / [<id> spin] / [<id> bounce] — only
+  // meaningful for prop actors (character actors take the full walk/action
+  // direction set through their own Puppet instead).
+
+  moveActor(actor, x, instant) {
+    if (actor.kind !== 'prop') return;
+    actor.x = x;
+    actor.el.style.transition = instant ? 'none' : 'left 600ms ease';
+    actor.el.style.left = x + '%';
+  }
+
+  scaleActor(actor, scale, instant) {
+    if (actor.kind !== 'prop') return;
+    actor.scale = scale;
+    actor.el.style.transition = instant ? 'none' : 'height 600ms ease';
+    const f = this.frames.get(actor.frameId);
+    if (f) this.applyPropScale(f, actor);
+  }
+
+  spinActor(actor) {
+    if (actor.kind !== 'prop') return;
+    actor.el.style.transformOrigin = '50% 100%';
+    actor.el.animate(
+      [{ transform: 'translateX(-50%) rotate(0deg)' }, { transform: 'translateX(-50%) rotate(360deg)' }],
+      { duration: 700, easing: 'ease-in-out' });
+  }
+
+  bounceActor(actor) {
+    if (actor.kind !== 'prop') return;
+    actor.el.style.transformOrigin = '50% 100%';
+    actor.el.animate([
+      { transform: 'translateX(-50%) translateY(0) scale(1,1)' },
+      { transform: 'translateX(-50%) translateY(0) scale(1.15,0.85)', offset: 0.15 },
+      { transform: 'translateX(-50%) translateY(-30px) scale(0.9,1.15)', offset: 0.5 },
+      { transform: 'translateX(-50%) translateY(0) scale(1.15,0.85)', offset: 0.85 },
+      { transform: 'translateX(-50%) translateY(0) scale(1,1)' },
+    ], { duration: 500, easing: 'ease-in-out' });
+  }
+
+  // ----------------------------------------------------------- wearables
+
+  // `target` is a frame id (its primary character) or an actor id; frame
+  // ids resolve first, matching every other target-resolution rule here.
+  resolveWearTarget(targetId) {
+    const f = this.frames.get(targetId);
+    if (f && f.puppet) return f.puppet;
+    for (const cand of this.frames.values()) {
+      const a = cand.actors.get(targetId);
+      if (a && a.puppet) return a.puppet;
+    }
+    return null;
+  }
+
+  wear(cue) {
+    const puppet = this.resolveWearTarget(cue.target);
+    if (!puppet) { toast(`wear: unknown target "${cue.target}"`); return; }
+    puppet.wear(cue.anchor || 'head', cue.prop, cue.scale !== undefined ? cue.scale : 1);
+  }
+
+  unwear(cue) {
+    const puppet = this.resolveWearTarget(cue.target);
+    if (!puppet) return;
+    puppet.unwear(cue.anchor || 'head');
   }
 
   // ----------------------------------------------------------- overlays
@@ -711,6 +1027,281 @@ class Stage {
   }
 }
 
+// ------------------------------------------------------------- MusicEngine
+//
+// Stage-global background music + one-shot SFX, driven by small JSON note
+// patterns (assets/music/*.json, assets/sfx/*.json — see docs/design/
+// actors-wearables-music.md) rather than audio files. One instance for the
+// whole stage (not per-frame): music survives frame/layout changes and
+// script-start; only an explicit `[music off]` stops it. The instance is
+// created lazily on the first `music`/`sfx` cue (see ensureMusicEngine
+// below), so a script that never uses either never constructs an
+// AudioContext or makes a sound — same backward-compatibility contract as
+// every other additive feature here.
+//
+// Scheduling is the standard Web Audio "lookahead" pattern: a ~100ms timer
+// looks ~300ms into ctx.currentTime and schedules any notes that fall due in
+// that window with their exact absolute start time (rather than one
+// setTimeout per note, which drifts). Each note is an OscillatorNode of the
+// track's wave through its own short-envelope GainNode (~10ms linear attack,
+// ~50ms linear release) so notes don't click. `loop:true` patterns are
+// scheduled by wall-clock offset from an absolute pattern-start time modulo
+// the pattern's total beat length, so they repeat seamlessly.
+//
+// Two gain stages, deliberately kept separate:
+//   - a per-player "layer" gain (crossfade control) — a new music cue ramps
+//     a fresh player's layer in from 0 while the old player's layer ramps
+//     out, both over ~300ms, then the old player is torn down.
+//   - the shared `musicMaster` gain (ducking control) that every music
+//     layer feeds into on its way to the destination, base ~0.5, ramped to
+//     40% of base while any speech clip is playing anywhere on the stage
+//     (see Puppet.speak/stopSpeaking's musicEngine.duck()/unduck() calls)
+//     and back once nothing is speaking.
+// SFX are one-shots: their own player connects straight to ctx.destination,
+// bypassing musicMaster entirely, so they're never ducked and never
+// crossfaded — they just play once over whatever else is happening.
+
+const MUSIC_LOOKAHEAD_MS = 100;   // scheduler tick interval
+const MUSIC_SCHEDULE_AHEAD = 0.3; // seconds of lookahead scheduled per tick
+const MUSIC_BASE_GAIN = 0.5;
+const MUSIC_DUCK_FACTOR = 0.4;    // fraction of base gain while speech plays
+const MUSIC_DUCK_MS = 150;
+const MUSIC_CROSSFADE_MS = 300;
+const NOTE_ATTACK = 0.01;
+const NOTE_RELEASE = 0.05;
+
+function midiToFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+
+// One playing instance of a note pattern (either the current music track, an
+// outgoing music track mid-crossfade, or a single SFX one-shot). Owns its own
+// lookahead scheduler and layer GainNode; `output` is where that layer feeds
+// (musicMaster for music, ctx.destination directly for sfx).
+class PatternPlayer {
+  constructor(ctx, pattern, output) {
+    this.ctx = ctx;
+    this.loop = !!pattern.loop;
+    this.secPerBeat = 60 / (pattern.tempo || 120);
+    this.notes = [];
+    for (const track of pattern.tracks || []) {
+      const wave = track.wave || 'sine';
+      const gain = track.gain !== undefined ? track.gain : 0.2;
+      for (const [beat, midi, len] of track.notes || []) {
+        this.notes.push({ beat, midi, len, wave, gain });
+      }
+    }
+    this.notes.sort((a, b) => a.beat - b.beat);
+    this.patternBeats = this.notes.reduce((m, n) => Math.max(m, n.beat + n.len), 0) || 1;
+
+    this.layerGain = ctx.createGain();
+    this.layerGain.gain.value = 1;
+    this.layerGain.connect(output);
+
+    this.loopStart = null;
+    this.nextIdx = 0;
+    this.timer = null;
+    this.stopped = false;
+  }
+
+  start(fadeInMs) {
+    const now = this.ctx.currentTime;
+    this.loopStart = now + 0.05; // small safety margin so the first note never lands in the past
+    this.nextIdx = 0;
+    if (fadeInMs) {
+      this.layerGain.gain.setValueAtTime(0, now);
+      this.layerGain.gain.linearRampToValueAtTime(1, now + fadeInMs / 1000);
+    } else {
+      this.layerGain.gain.setValueAtTime(1, now);
+    }
+    this.schedule(); // cover the first window immediately; no gap before the timer's first tick
+    this.timer = setInterval(() => this.schedule(), MUSIC_LOOKAHEAD_MS);
+  }
+
+  schedule() {
+    if (this.stopped) return;
+    const aheadUntil = this.ctx.currentTime + MUSIC_SCHEDULE_AHEAD;
+    const loopSeconds = this.patternBeats * this.secPerBeat;
+    for (;;) {
+      if (this.nextIdx >= this.notes.length) {
+        if (!this.loop) {
+          if (this.ctx.currentTime > this.loopStart + loopSeconds) this.stop();
+          return;
+        }
+        this.loopStart += loopSeconds;
+        this.nextIdx = 0;
+        continue;
+      }
+      const note = this.notes[this.nextIdx];
+      const t = this.loopStart + note.beat * this.secPerBeat;
+      if (t > aheadUntil) return;
+      this.playNote(note, t);
+      this.nextIdx++;
+    }
+  }
+
+  playNote(note, t) {
+    const ctx = this.ctx;
+    const osc = ctx.createOscillator();
+    osc.type = note.wave;
+    osc.frequency.setValueAtTime(midiToFreq(note.midi), t);
+    const g = ctx.createGain();
+    const dur = Math.max(note.len * this.secPerBeat, NOTE_ATTACK + NOTE_RELEASE);
+    const releaseStart = Math.max(t + NOTE_ATTACK, t + dur - NOTE_RELEASE);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(note.gain, t + NOTE_ATTACK);
+    g.gain.setValueAtTime(note.gain, releaseStart);
+    g.gain.linearRampToValueAtTime(0, releaseStart + NOTE_RELEASE);
+    osc.connect(g);
+    g.connect(this.layerGain);
+    osc.start(t);
+    osc.stop(releaseStart + NOTE_RELEASE + 0.02);
+  }
+
+  fadeOutAndStop(ms) {
+    const now = this.ctx.currentTime;
+    this.layerGain.gain.cancelScheduledValues(now);
+    this.layerGain.gain.setValueAtTime(this.layerGain.gain.value, now);
+    this.layerGain.gain.linearRampToValueAtTime(0, now + ms / 1000);
+    setTimeout(() => this.stop(), ms + 20);
+  }
+
+  stop() {
+    if (this.stopped) return;
+    this.stopped = true;
+    clearInterval(this.timer);
+    try { this.layerGain.disconnect(); } catch { /* already disconnected */ }
+  }
+}
+
+class MusicEngine {
+  constructor() {
+    this.ctx = null;
+    this.musicMaster = null;
+    this.player = null;        // currently-current music PatternPlayer (an outgoing one during crossfade keeps its own timer alive independently)
+    this.currentId = null;
+    this.cache = new Map();    // "kind/id" -> parsed JSON, or null for a confirmed-missing asset
+    this.pending = new Map();  // "kind/id" -> in-flight fetch promise
+    this.pendingMusicId = null; // desired track id requested before the AudioContext was running; started on unlock
+    this.musicGen = 0;         // bumped on every music()/stopMusic() call so a stale in-flight fetch can't clobber a newer request
+    this.duckCount = 0;
+  }
+
+  ensureCtx() {
+    if (!this.ctx) {
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      this.musicMaster = this.ctx.createGain();
+      this.musicMaster.gain.value = MUSIC_BASE_GAIN;
+      this.musicMaster.connect(this.ctx.destination);
+    }
+    return this.ctx;
+  }
+
+  async fetchPattern(kind, id) {
+    const key = `${kind}/${id}`;
+    if (this.cache.has(key)) return this.cache.get(key);
+    if (this.pending.has(key)) return this.pending.get(key);
+    const p = (async () => {
+      try {
+        const res = await fetch(assetUrl(kind, id));
+        if (!res.ok) throw new Error('missing asset');
+        return await res.json();
+      } catch {
+        return null;
+      }
+    })();
+    this.pending.set(key, p);
+    const result = await p;
+    this.pending.delete(key);
+    this.cache.set(key, result);
+    return result;
+  }
+
+  // -------------------------------------------------------------- music
+
+  async music(cue) {
+    const gen = ++this.musicGen;
+    if (cue.off) { this.stopMusic(); return; }
+    if (!cue.id) return;
+    const ctx = this.ensureCtx();
+    if (ctx.state !== 'running') {
+      ctx.resume().catch(() => {});
+      this.pendingMusicId = cue.id;
+      toast('🔇 Click anywhere once to enable sound');
+      return;
+    }
+    await this.startMusic(cue.id, gen);
+  }
+
+  async startMusic(id, gen) {
+    const pattern = await this.fetchPattern('music', id);
+    if (gen !== this.musicGen) return; // superseded by a newer [music ...]/[music off] while fetching
+    if (!pattern) { toast(`music: missing track "${id}"`); return; }
+    const old = this.player;
+    const fresh = new PatternPlayer(this.ctx, pattern, this.musicMaster);
+    this.player = fresh;
+    this.currentId = id;
+    fresh.start(MUSIC_CROSSFADE_MS);
+    if (old) old.fadeOutAndStop(MUSIC_CROSSFADE_MS);
+  }
+
+  stopMusic() {
+    this.musicGen++;
+    this.pendingMusicId = null;
+    if (this.player) { this.player.fadeOutAndStop(MUSIC_CROSSFADE_MS); this.player = null; }
+    this.currentId = null;
+  }
+
+  // ---------------------------------------------------------------- sfx
+
+  async sfx(cue) {
+    if (!cue.id) return;
+    const ctx = this.ensureCtx();
+    if (ctx.state !== 'running') {
+      await ctx.resume().catch(() => {});
+      if (ctx.state !== 'running') { toast('🔇 Click anywhere once to enable sound'); return; }
+    }
+    const pattern = await this.fetchPattern('sfx', cue.id);
+    if (!pattern) { toast(`sfx: missing "${cue.id}"`); return; }
+    new PatternPlayer(ctx, { ...pattern, loop: false }, ctx.destination).start(0);
+  }
+
+  // ------------------------------------------------------------- ducking
+  //
+  // A simple concurrent-speakers counter: Puppet.speak()/stopSpeaking() call
+  // duck()/unduck() once per clip (across every frame/actor puppet), so
+  // overlapping speech from more than one character still only ramps at the
+  // 0->1 and 1->0 transitions.
+
+  duck() {
+    this.duckCount++;
+    if (this.duckCount === 1 && this.musicMaster) this.rampMaster(MUSIC_BASE_GAIN * MUSIC_DUCK_FACTOR);
+  }
+
+  unduck() {
+    this.duckCount = Math.max(0, this.duckCount - 1);
+    if (this.duckCount === 0 && this.musicMaster) this.rampMaster(MUSIC_BASE_GAIN);
+  }
+
+  rampMaster(target) {
+    const now = this.ctx.currentTime;
+    this.musicMaster.gain.cancelScheduledValues(now);
+    this.musicMaster.gain.setValueAtTime(this.musicMaster.gain.value, now);
+    this.musicMaster.gain.linearRampToValueAtTime(target, now + MUSIC_DUCK_MS / 1000);
+  }
+
+  // Called from the shared gesture-unlock listener alongside every puppet's
+  // own unlock (mirrors Puppet's suspended-context handling): if a [music]
+  // cue arrived before any gesture, this is where its track actually starts.
+  unlock() {
+    if (!this.ctx) return;
+    if (this.ctx.state !== 'running') this.ctx.resume().catch(() => {});
+    if (this.pendingMusicId) {
+      const id = this.pendingMusicId;
+      this.pendingMusicId = null;
+      this.startMusic(id, ++this.musicGen);
+    }
+  }
+}
+
 // ------------------------------------------------------------- cue bus
 
 const $id = (i) => document.getElementById(i);
@@ -718,9 +1309,25 @@ const $id = (i) => document.getElementById(i);
 const stage = new Stage($id('frames'), $id('overlays'), $id('captions'), $id('take'));
 stage.ensureFrame('main'); // boots as one full-size frame + the default character
 
+// Stage-global MusicEngine, constructed lazily on the first music/sfx cue —
+// a script that never uses either never allocates it (or its AudioContext).
+let musicEngine = null;
+function ensureMusicEngine() { return musicEngine || (musicEngine = new MusicEngine()); }
+
 function mainPuppet() {
   const f = stage.frames.get('main');
   return f && f.puppet;
+}
+
+// Character direction (speak/action/walk/look/view) targets an actor's
+// Puppet when the cue carries `actor`, else the frame's primary — same
+// resolution order the parser applies (frame id, then actor id).
+function puppetForCue(cue) {
+  if (cue.actor) {
+    const a = stage.resolveActor(cue);
+    return a ? a.puppet : null;
+  }
+  return stage.forFrame(cue);
 }
 
 function handleCue(cue) {
@@ -736,20 +1343,30 @@ function handleCue(cue) {
     case 'content': stage.content(cue); break;
     case 'content-clear': stage.contentClear(cue); break;
     case 'scene': stage.scene(cue); break;
+    case 'place': stage.place(cue); break;
+    case 'remove': stage.removeActor(cue); break;
+    case 'move': { const a = stage.resolveActor(cue); if (a) stage.moveActor(a, cue.x); break; }
+    case 'scale': { const a = stage.resolveActor(cue); if (a) stage.scaleActor(a, cue.value); break; }
+    case 'spin': { const a = stage.resolveActor(cue); if (a) stage.spinActor(a); break; }
+    case 'bounce': { const a = stage.resolveActor(cue); if (a) stage.bounceActor(a); break; }
+    case 'wear': stage.wear(cue); break;
+    case 'unwear': stage.unwear(cue); break;
+    case 'music': ensureMusicEngine().music(cue); break;
+    case 'sfx': ensureMusicEngine().sfx(cue); break;
     case 'overlay': stage.overlay(cue); break;
     case 'overlay-clear': stage.overlayClear(cue); break;
     case 'captions': stage.captions(cue); break;
     case 'transition': stage.transition(cue); break;
     case 'speak': {
-      const p = stage.forFrame(cue);
+      const p = puppetForCue(cue);
       if (p) p.speak(cue);
       stage.showCaption(cue);
       break;
     }
-    case 'action': { const p = stage.forFrame(cue); if (p) p.act(cue.name); break; }
-    case 'walk': { const p = stage.forFrame(cue); if (p) p.walkTo(cue.x, cue.jump || cue.from); break; }
-    case 'look': { const p = stage.forFrame(cue); if (p) p.look(cue.dir); break; }
-    case 'view': { const p = stage.forFrame(cue); if (p) p.setView(cue.mode); break; }
+    case 'action': { const p = puppetForCue(cue); if (p) p.act(cue.name); break; }
+    case 'walk': { const p = puppetForCue(cue); if (p) p.walkTo(cue.x, cue.jump || cue.from); break; }
+    case 'look': { const p = puppetForCue(cue); if (p) p.look(cue.dir); break; }
+    case 'view': { const p = puppetForCue(cue); if (p) p.setView(cue.mode); break; }
     case 'character': {
       const id = cue.frame || stage.activeId;
       if (cue.frame) stage.activeId = id;
@@ -757,7 +1374,10 @@ function handleCue(cue) {
       break;
     }
     case 'script-start':
-      for (const f of stage.frames.values()) if (f.puppet) f.puppet.stopSpeaking();
+      for (const f of stage.frames.values()) {
+        if (f.puppet) f.puppet.stopSpeaking();
+        for (const a of f.actors.values()) if (a.puppet) a.puppet.stopSpeaking();
+      }
       prompterStart(cue.lines);
       break;
     case 'script-line': prompterHighlight(cue.index); break;
@@ -791,7 +1411,11 @@ function unlockAudio(p) {
 }
 for (const ev of ['pointerdown', 'keydown']) {
   window.addEventListener(ev, () => {
-    for (const f of stage.frames.values()) if (f.puppet) unlockAudio(f.puppet);
+    for (const f of stage.frames.values()) {
+      if (f.puppet) unlockAudio(f.puppet);
+      for (const a of f.actors.values()) if (a.puppet) unlockAudio(a.puppet);
+    }
+    if (musicEngine) musicEngine.unlock();
   }, true);
 }
 

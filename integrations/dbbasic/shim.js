@@ -14,6 +14,7 @@
   const POLL_MS = 350;
   const CHARACTERS = window.PUPPET_CHARACTERS || {};
   const EXAMPLES = window.PUPPET_EXAMPLES || {};
+  const AUDIO = window.PUPPET_AUDIO || { music: {}, sfx: {} };
   const realFetch = window.fetch.bind(window);
 
   const jsonResponse = (obj, status = 200) =>
@@ -67,6 +68,7 @@
           ? { type: 'speak', audio: d.audio, timeline: d.timeline, duration: d.duration, text: d.text }
           : { type: 'error', message: d.error || 'speech failed' };
         if (cue.type === 'speak' && rawCue.frame) cue.frame = rawCue.frame;
+        if (cue.type === 'speak' && rawCue.actor) cue.actor = rawCue.actor;
       }
       if (this.onmessage) this.onmessage({ data: JSON.stringify(cue) });
     }
@@ -94,8 +96,9 @@
     return out;
   }
 
-  function directionCue(body, frameIds) {
+  function directionCue(body, frameIds, actorIds) {
     frameIds = frameIds || new Set(['main']);
+    actorIds = actorIds || new Set();
     const parts = body.trim().split(/\s+/);
     const head = parts[0].toLowerCase();
 
@@ -173,9 +176,71 @@
       return { type: 'transition', name: head, dir: (parts[1] || 'out').toLowerCase(), ms: isNaN(ms) ? 700 : ms };
     }
 
+    if (head === 'place') {
+      // [place <what> at <x> [id:<id>] [scale:<n>] [behind]]
+      const rest = parts.slice(1);
+      const what = rest[0];
+      const atIdx = rest.indexOf('at');
+      const x = atIdx >= 0 ? parseFloat(rest[atIdx + 1]) : NaN;
+      const restStr = parts.slice(1).join(' ');
+      const kv = parseKV(restStr);
+      const id = kv.id || what;
+      const cue = { type: 'place', id, what, x };
+      if (kv.scale !== undefined) cue.scale = parseFloat(kv.scale);
+      if (/\bbehind\b/.test(restStr)) cue.behind = true;
+      actorIds.add(id);
+      return cue;
+    }
+
+    if (head === 'remove') {
+      const id = parts[1];
+      actorIds.delete(id);
+      return { type: 'remove', id };
+    }
+
+    if (head === 'wear') {
+      // [wear <target> <prop> [scale:<n>] [anchor:<name>]]
+      const target = parts[1];
+      const prop = parts[2];
+      const kv = parseKV(parts.slice(3).join(' '));
+      const cue = { type: 'wear', target, prop };
+      if (kv.scale !== undefined) cue.scale = parseFloat(kv.scale);
+      if (kv.anchor !== undefined) cue.anchor = kv.anchor;
+      return cue;
+    }
+
+    if (head === 'unwear') {
+      const target = parts[1];
+      const cue = { type: 'unwear', target };
+      if (parts[2]) cue.anchor = parts[2];
+      return cue;
+    }
+
+    if (head === 'music') {
+      const arg = (parts[1] || '').toLowerCase();
+      if (arg === 'off') return { type: 'music', off: true };
+      return { type: 'music', id: parts[1] };
+    }
+
+    if (head === 'sfx') return { type: 'sfx', id: parts[1] };
+
+    // Prop-actor directions, reached via the actorIds fallback below (e.g.
+    // [hoop1 move 40] recurses into directionCue("move 40", ...)).
+    if (head === 'move') return { type: 'move', x: parseFloat(parts[1]) };
+    if (head === 'scale') return { type: 'scale', value: parseFloat(parts[1]) };
+    if (head === 'spin') return { type: 'spin' };
+    if (head === 'bounce') return { type: 'bounce' };
+
     if (frameIds.has(head) && parts.length > 1) {
-      const sub = directionCue(parts.slice(1).join(' '), frameIds);
+      const sub = directionCue(parts.slice(1).join(' '), frameIds, actorIds);
       sub.frame = head;
+      return sub;
+    }
+
+    // Same, for a placed actor id (checked after frame ids, per spec).
+    if (actorIds.has(head) && parts.length > 1) {
+      const sub = directionCue(parts.slice(1).join(' '), frameIds, actorIds);
+      sub.actor = head;
       return sub;
     }
 
@@ -185,28 +250,33 @@
   function parseScript(src) {
     const cues = [];
     const frameIds = new Set(['main']);
+    const actorIds = new Set(); // tracks ids declared by [place ...] as we go
     for (const rawLine of src.split('\n')) {
       const line = rawLine.trim();
       if (!line || line.startsWith('#')) continue;
       if (/^(\[[^\]]+\]\s*)+$/.test(line)) {
-        for (const m of line.matchAll(/\[([^\]]+)\]/g)) cues.push({ ...directionCue(m[1], frameIds), source: line });
+        for (const m of line.matchAll(/\[([^\]]+)\]/g)) cues.push({ ...directionCue(m[1], frameIds, actorIds), source: line });
         continue;
       }
 
       let text = line;
       let frame = null;
+      let actor = null;
       const speaker = text.match(/^([A-Za-z][\w-]*):\s*(.*)$/);
       if (speaker && frameIds.has(speaker[1])) { frame = speaker[1]; text = speaker[2]; }
+      else if (speaker && actorIds.has(speaker[1])) { actor = speaker[1]; text = speaker[2]; }
 
       let concurrent = null;
       const inline = text.match(/^\(([^)]+)\)\s*(.*)$/);
       if (inline) {
-        concurrent = { ...directionCue(inline[1], frameIds), source: line };
+        concurrent = { ...directionCue(inline[1], frameIds, actorIds), source: line };
         text = inline[2];
         if (frame) concurrent.frame = frame;
+        if (actor) concurrent.actor = actor;
       }
       const cue = { type: 'speak-line', text, concurrent, source: line };
       if (frame) cue.frame = frame;
+      if (actor) cue.actor = actor;
       cues.push(cue);
     }
     return cues;
@@ -231,6 +301,9 @@
     // this shim. Seeded with the client's notion of who's in the main frame.
     const frameChar = {};
     if (mainCharacter) frameChar.main = mainCharacter;
+    // actor id -> character name, for actor-targeted speak-line cues
+    // (mirrors frameChar but seeded from [place] cues).
+    const actorChar = {};
 
     for (const cue of cues) {
       if (cue.type === 'setting') {
@@ -241,12 +314,22 @@
       }
       if (cue.type === 'frame' && cue.character) frameChar[cue.id] = cue.character;
       if (cue.type === 'character') frameChar[cue.frame || 'main'] = cue.name;
+      if (cue.type === 'place') {
+        // `what` names a character iff it's an embedded PUPPET_CHARACTERS
+        // key; a prop actor placed over a stale id clears any earlier
+        // character mapping.
+        if (CHARACTERS[cue.what]) actorChar[cue.id] = cue.what;
+        else delete actorChar[cue.id];
+      }
+      if (cue.type === 'remove') delete actorChar[cue.id];
 
       if (cue.type === 'speak-line') {
         // Resolution: an explicit [engine]/[voice] direction always wins;
         // otherwise use the declared voice of the character in this line's
-        // frame; otherwise fall back to the (default) settings.
-        const ch = CHARACTERS[frameChar[cue.frame || 'main']];
+        // actor (if actor-targeted) or frame; otherwise fall back to the
+        // (default) settings.
+        const charName = cue.actor ? actorChar[cue.actor] : frameChar[cue.frame || 'main'];
+        const ch = CHARACTERS[charName];
         const cv = ch && ch.manifest && ch.manifest.voice;
         const engine = engineOverridden ? settings.engine : (cv && cv.engine) || settings.engine;
         const voice = voiceOverridden ? settings.voice : (cv && cv.voice !== undefined ? cv.voice : settings.voice);
@@ -309,6 +392,7 @@
         if (cue.concurrent) await postCue(cue.concurrent);
         const sayCue = { type: 'say-text', text: cue.text, ...cue.resolved };
         if (cue.frame) sayCue.frame = cue.frame;
+        if (cue.actor) sayCue.actor = cue.actor;
         await postCue(sayCue);
         await sleep(((d.duration || cue.text.split(/\s+/).length * 0.35) * 1000) + 400);
         ensureRender(k + RENDER_WINDOW);
@@ -373,9 +457,20 @@
       return jsonResponse({ name, script });
     }
     if (u === '/api/assets') {
-      // the package page has no asset serving; the UI hides pickers that get
-      // empty lists back.
-      return jsonResponse({ backgrounds: [], props: [], overlays: [] });
+      // the package page has no image asset serving; the UI hides pickers
+      // that get empty lists back. Music/sfx JSON *is* embedded (small), so
+      // those two lists are real.
+      return jsonResponse({
+        backgrounds: [], props: [], overlays: [],
+        music: Object.keys(AUDIO.music || {}).sort(),
+        sfx: Object.keys(AUDIO.sfx || {}).sort(),
+      });
+    }
+    if (u.startsWith('/api/asset/music/') || u.startsWith('/api/asset/sfx/')) {
+      const [, , , kind, id] = u.split('/');
+      const data = AUDIO[kind] && AUDIO[kind][id];
+      if (!data) return jsonResponse({ error: 'asset not found' }, 404);
+      return jsonResponse(data);
     }
     return realFetch(url, opts);
   };

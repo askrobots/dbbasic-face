@@ -1,0 +1,38 @@
+# The Amazing Rex: a one-dog circus. Actors, wearables, and music in one ring.
+[captions on]
+[frame main character:bo bg:bigtop view:body]
+[fade in 900]
+[music fanfare]
+[wear main tophat]
+(wave) Ladies and gentlemen! Welcome to the greatest little show on this stage!
+[music circus]
+[walk to 78]
+I present... the astonishing... the acrobatic... REX!
+[place rex at 10 scale:0.7]
+[lower-third "The Amazing Rex" "One dog. One hoop. No fear."]
+[rex walk 32]
+rex: Woof! Woof!
+[rex wag]
+(nod) Good boy! And now — the hoop of destiny!
+[place hoop at 58 scale:0.55]
+Rex... steady now...
+[rex sit]
+[wait 0.8]
+LEAP!
+[rex leap]
+[sfx tada]
+[emote happy] (wave) Magnificent! The crowd goes wild!
+[lower-third clear]
+[place money at 50 scale:0.12]
+[place coin at 56 scale:0.06]
+[place coin at 44 id:coin2 scale:0.06]
+A shower of riches for tonight's star!
+[rex beg]
+rex: Woof!
+Yes, yes — it is all for you. Mostly.
+[sfx chime]
+And that, dear friends, is the whole show. Small dog. Big heart.
+(bow) [rex sit]
+[music off]
+Good night, everybody!
+[iris out 1400]

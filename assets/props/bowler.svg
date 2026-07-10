@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 100">
+  <!-- brim: flat bottom edge sits at the bottom of the viewBox -->
+  <path d="M10,100 L130,100 L130,90 Q130,82 70,82 Q10,82 10,90 Z" fill="#5a3a1f" stroke="#000000" stroke-width="1.5"/>
+  <path d="M44,82 Q44,20 70,20 Q96,20 96,82 Z" fill="#7a4f2a" stroke="#000000" stroke-width="2"/>
+  <rect x="44" y="70" width="52" height="10" fill="#3a2412"/>
+</svg>

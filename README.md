@@ -195,13 +195,18 @@ Where we left off.
 [iris out 1200]
 ```
 
-An asset library ships in `assets/`: ten backgrounds (`desk`, `sky`, `room`,
-`hilltop`, `street`, `newsroom`, `forest`, `night`, `kitchen`, `curtain`),
-eleven props (including a `golden-box`), and five overlay templates
-(`lower-third`, `title-card`, `breaking`, `ticker`, `balloon`). Five
-characters ship in `characters/`: `pip` (cartoon minimal), `ava` and `gus`
-(flat semi-realistic), `bo` and `mae` (vintage rubber-hose) — each with its
-own voice. See
+An asset library ships in `assets/`: eleven backgrounds (including a
+`bigtop` and theater `curtain`), eighteen props (hats, a hoop, money, a
+`golden-box`, …), five overlay templates (`lower-third`, `title-card`,
+`breaking`, `ticker`, `balloon`), four music loops and four sound effects as
+JSON note patterns (`circus`, `waltz`, `sneak`, `fanfare`; `tada`, `boing`,
+`thud`, `chime`). Six characters ship in `characters/`: `pip` (cartoon
+minimal), `ava` and `gus` (flat semi-realistic), `bo` and `mae` (vintage
+rubber-hose), and `rex` (a rubber-hose dog who does tricks) — each with its
+own voice. Scenes can hold placed actors and props (`[place rex at 15]`,
+`[place hoop at 58]`), characters can wear props (`[wear main tophat]`), and
+music/SFX are scriptable (`[music circus]`, `[sfx tada]`, `[music off]`) —
+see [docs/design/actors-wearables-music.md](docs/design/actors-wearables-music.md). See
 [docs/authoring-assets.md](docs/authoring-assets.md) for adding your own, and
 [docs/design/frames-and-scenes.md](docs/design/frames-and-scenes.md) for the
 full cue schema and screenplay grammar.

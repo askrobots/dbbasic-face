@@ -33,8 +33,14 @@ const PORT = process.env.PORT || 3123;
 // PNG/JPG/WebP/GIF drop into the same slots as SVG with no code change.
 const ASSET_EXTS = ['.svg', '.png', '.jpg', '.jpeg', '.webp', '.gif'];
 
+// music/sfx assets are JSON note patterns (see docs/design/actors-wearables-
+// music.md), not images, so they resolve against their own extension set.
+const AUDIO_KINDS = ['music', 'sfx'];
+const AUDIO_EXTS = ['.json'];
+
 function resolveAsset(kind, id) {
-  for (const ext of ASSET_EXTS) {
+  const exts = AUDIO_KINDS.includes(kind) ? AUDIO_EXTS : ASSET_EXTS;
+  for (const ext of exts) {
     const file = path.join(ASSETS, kind, id + ext);
     if (fs.existsSync(file)) return file;
   }
@@ -274,40 +280,74 @@ function parseKV(str) {
  *   [left wave]            → direction targeting frame "left"
  *   (wave) Hello!          → action fired concurrently with the line
  *   Hello!                 → speech
+ *
+ *   [place hoop at 70 scale:0.5]        → place a prop/character actor
+ *                             ("at" required; "id:" defaults to the name,
+ *                             "scale:" defaults 1 for characters/0.4 for
+ *                             props, bare "behind" flag draws it behind the
+ *                             frame's primary character)
+ *   [place rex at 15 scale:0.6 id:sidekick]  → `what` names a folder in
+ *                             characters/ → a full rig; otherwise it
+ *                             resolves as assets/props/<what>
+ *   [remove sidekick]       → destroy a placed actor
+ *   [<id> move 40], [<id> scale 0.8], [<id> spin], [<id> bounce] → prop
+ *                             actor directions (glide/resize/spin/hop)
+ *   sidekick: Woof!          → speak cue targeting an actor id (same
+ *                             resolution order as frame ids: frame first,
+ *                             then actor)
+ *   [sidekick leap]          → direction on a character actor — the full
+ *                             direction set applies (walk/emote/actions/
+ *                             speak), same grammar as a frame id
+ *   [wear right tophat], [wear right tophat scale:1.2 anchor:head],
+ *   [unwear right]           → pin/remove a prop asset at a character's
+ *                             named anchor (`target` is a frame id — its
+ *                             primary character — or an actor id; anchor
+ *                             defaults to "head")
+ *   [music circus]           → cross-fade to assets/music/circus.json
+ *                             (a looping JSON note pattern), stage-global
+ *   [music off]              → fade out and stop the current music
+ *   [sfx tada]                → one-shot assets/sfx/tada.json, not looped,
+ *                             not ducked
  */
 function parseScript(src) {
   const cues = [];
   const frameIds = new Set(['main']); // tracks declared frame ids as we go
+  const actorIds = new Set(); // tracks ids declared by [place ...] as we go
   for (const rawLine of src.split('\n')) {
     const line = rawLine.trim();
     if (!line || line.startsWith('#')) continue;
 
     if (/^(\[[^\]]+\]\s*)+$/.test(line)) {
-      for (const m of line.matchAll(/\[([^\]]+)\]/g)) cues.push(directionCue(m[1], line, frameIds));
+      for (const m of line.matchAll(/\[([^\]]+)\]/g)) cues.push(directionCue(m[1], line, frameIds, actorIds));
       continue;
     }
 
     let text = line;
     let frame = null;
+    let actor = null;
     const speaker = text.match(/^([A-Za-z][\w-]*):\s*(.*)$/);
     if (speaker && frameIds.has(speaker[1])) { frame = speaker[1]; text = speaker[2]; }
+    else if (speaker && actorIds.has(speaker[1])) { actor = speaker[1]; text = speaker[2]; }
 
     let concurrent = null;
     const inline = text.match(/^\(([^)]+)\)\s*(.*)$/);
     if (inline) {
-      concurrent = directionCue(inline[1], line, frameIds);
+      concurrent = directionCue(inline[1], line, frameIds, actorIds);
       text = inline[2];
       if (frame) concurrent.frame = frame;
+      if (actor) concurrent.actor = actor;
     }
     const cue = { type: 'speak', text, concurrent, source: line };
     if (frame) cue.frame = frame;
+    if (actor) cue.actor = actor;
     cues.push(cue);
   }
   return cues;
 }
 
-function directionCue(body, source, frameIds) {
+function directionCue(body, source, frameIds, actorIds) {
   frameIds = frameIds || new Set(['main']);
+  actorIds = actorIds || new Set();
   const parts = body.trim().split(/\s+/);
   const head = parts[0].toLowerCase();
 
@@ -393,11 +433,74 @@ function directionCue(body, source, frameIds) {
     return { type: 'transition', name: head, dir: (parts[1] || 'out').toLowerCase(), ms: isNaN(ms) ? 700 : ms, source };
   }
 
+  if (head === 'place') {
+    // [place <what> at <x> [id:<id>] [scale:<n>] [behind]]
+    const rest = parts.slice(1);
+    const what = rest[0];
+    const atIdx = rest.indexOf('at');
+    const x = atIdx >= 0 ? parseFloat(rest[atIdx + 1]) : NaN;
+    const restStr = parts.slice(1).join(' ');
+    const kv = parseKV(restStr);
+    const id = kv.id || what;
+    const cue = { type: 'place', id, what, x, source };
+    if (kv.scale !== undefined) cue.scale = parseFloat(kv.scale);
+    if (/\bbehind\b/.test(restStr)) cue.behind = true;
+    actorIds.add(id);
+    return cue;
+  }
+
+  if (head === 'remove') {
+    const id = parts[1];
+    actorIds.delete(id);
+    return { type: 'remove', id, source };
+  }
+
+  if (head === 'wear') {
+    // [wear <target> <prop> [scale:<n>] [anchor:<name>]]
+    const target = parts[1];
+    const prop = parts[2];
+    const kv = parseKV(parts.slice(3).join(' '));
+    const cue = { type: 'wear', target, prop, source };
+    if (kv.scale !== undefined) cue.scale = parseFloat(kv.scale);
+    if (kv.anchor !== undefined) cue.anchor = kv.anchor;
+    return cue;
+  }
+
+  if (head === 'unwear') {
+    const target = parts[1];
+    const cue = { type: 'unwear', target, source };
+    if (parts[2]) cue.anchor = parts[2];
+    return cue;
+  }
+
+  if (head === 'music') {
+    const arg = (parts[1] || '').toLowerCase();
+    if (arg === 'off') return { type: 'music', off: true, source };
+    return { type: 'music', id: parts[1], source };
+  }
+
+  if (head === 'sfx') return { type: 'sfx', id: parts[1], source };
+
+  // Prop-actor directions — only meaningful when the head token that routed
+  // here was an actor id (see the actorIds fallback below), e.g.
+  // [hoop1 move 40] recurses into directionCue("move 40", ...).
+  if (head === 'move') return { type: 'move', x: parseFloat(parts[1]), source };
+  if (head === 'scale') return { type: 'scale', value: parseFloat(parts[1]), source };
+  if (head === 'spin') return { type: 'spin', source };
+  if (head === 'bounce') return { type: 'bounce', source };
+
   // [<id> <direction...>] — first token is a known frame id: apply the rest
   // of the direction to that frame.
   if (frameIds.has(head) && parts.length > 1) {
-    const sub = directionCue(parts.slice(1).join(' '), source, frameIds);
+    const sub = directionCue(parts.slice(1).join(' '), source, frameIds, actorIds);
     sub.frame = head;
+    return sub;
+  }
+
+  // Same, for a placed actor id (checked after frame ids, per spec).
+  if (actorIds.has(head) && parts.length > 1) {
+    const sub = directionCue(parts.slice(1).join(' '), source, frameIds, actorIds);
+    sub.actor = head;
     return sub;
   }
 
@@ -437,6 +540,9 @@ function resolveSpeech(cues, mainCharacter) {
   // declared voice too.
   const frameChar = {};
   if (mainCharacter) frameChar.main = mainCharacter;
+  // actor id -> character name, for actor-targeted speak cues (mirrors
+  // frameChar but seeded from [place] cues instead of [frame]/[character]).
+  const actorChar = {};
 
   for (const cue of cues) {
     if (cue.type === 'setting') {
@@ -447,12 +553,21 @@ function resolveSpeech(cues, mainCharacter) {
     }
     if (cue.type === 'frame' && cue.character) frameChar[cue.id] = cue.character;
     if (cue.type === 'character') frameChar[cue.frame || 'main'] = cue.name;
+    if (cue.type === 'place') {
+      // `what` names a character iff it's a folder in characters/; a prop
+      // actor placed over a stale id clears any earlier character mapping.
+      if (fs.existsSync(path.join(CHARACTERS, cue.what))) actorChar[cue.id] = cue.what;
+      else delete actorChar[cue.id];
+    }
+    if (cue.type === 'remove') delete actorChar[cue.id];
 
     if (cue.type === 'speak') {
       // Resolution: an explicit [engine]/[voice] direction always wins;
       // otherwise use the declared voice of the character in this line's
-      // frame; otherwise fall back to the (default) settings.
-      const cv = characterVoice(frameChar[cue.frame || 'main']);
+      // actor (if actor-targeted) or frame; otherwise fall back to the
+      // (default) settings.
+      const charName = cue.actor ? actorChar[cue.actor] : frameChar[cue.frame || 'main'];
+      const cv = characterVoice(charName);
       const engine = engineOverridden ? settings.engine : (cv && cv.engine) || settings.engine;
       const voice = voiceOverridden ? settings.voice : (cv && cv.voice !== undefined ? cv.voice : settings.voice);
       cue.speech = { text: cue.text, engine, voice, rate: settings.rate };
@@ -520,6 +635,7 @@ async function runScript(src, mainCharacter) {
       if (cue.concurrent) broadcast(cue.concurrent);
       const speakCue = { type: 'speak', ...prepared };
       if (cue.frame) speakCue.frame = cue.frame;
+      if (cue.actor) speakCue.actor = cue.actor;
       broadcast(speakCue);
       await sleep(prepared.duration * 1000 + 300);
       ensureRender(k + RENDER_WINDOW);
@@ -593,6 +709,7 @@ const server = http.createServer(async (req, res) => {
       const prepared = await prepareSpeech(body);
       const cue = { type: 'speak', ...prepared };
       if (body.frame) cue.frame = body.frame;
+      if (body.actor) cue.actor = body.actor;
       broadcast(cue);
       return json(res, 200, prepared);
     }
@@ -658,16 +775,19 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { name: rel, script: fs.readFileSync(file, 'utf8') });
     }
 
-    // GET /api/assets → {backgrounds, props, overlays}: ids (filenames minus
-    // extension) available in assets/<kind>/, deduped across the extension set.
+    // GET /api/assets → {backgrounds, props, overlays, music, sfx}: ids
+    // (filenames minus extension) available in assets/<kind>/, deduped
+    // across the relevant extension set (svg/raster for most kinds, .json
+    // for the audio kinds).
     if (p === '/api/assets') {
       const listKind = (kind) => {
         let files = [];
         try { files = fs.readdirSync(path.join(ASSETS, kind)); } catch { return []; }
+        const exts = AUDIO_KINDS.includes(kind) ? AUDIO_EXTS : ASSET_EXTS;
         const ids = new Set();
         for (const f of files) {
           const ext = path.extname(f);
-          if (ASSET_EXTS.includes(ext)) ids.add(f.slice(0, -ext.length));
+          if (exts.includes(ext)) ids.add(f.slice(0, -ext.length));
         }
         return [...ids].sort();
       };
@@ -675,6 +795,8 @@ const server = http.createServer(async (req, res) => {
         backgrounds: listKind('backgrounds'),
         props: listKind('props'),
         overlays: listKind('overlays'),
+        music: listKind('music'),
+        sfx: listKind('sfx'),
       });
     }
 

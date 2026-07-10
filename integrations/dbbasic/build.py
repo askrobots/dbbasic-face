@@ -6,6 +6,10 @@ Assembles puppet-stage/objects/puppet/stage.py from:
   ../../public/stage.js     (verbatim frontend runtime)
   ./shim.js                 (DBBASIC transport adapter, loaded first)
   ../../characters/*/       (embedded as window.PUPPET_CHARACTERS)
+  ../../assets/music/*.json, ../../assets/sfx/*.json
+                             (embedded as window.PUPPET_AUDIO — small JSON
+                             note patterns, same embed-not-serve treatment
+                             as characters)
 
 Re-run after changing any of those so the package cannot drift from the app.
 """
@@ -36,6 +40,11 @@ examples = {}
 for script_path in sorted((ROOT / "examples").glob("*.txt")):
     examples[script_path.stem] = script_path.read_text()
 
+audio = {"music": {}, "sfx": {}}
+for kind in audio:
+    for asset_path in sorted((ROOT / "assets" / kind).glob("*.json")):
+        audio[kind][asset_path.stem] = json.loads(asset_path.read_text())
+
 html = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -48,6 +57,7 @@ html = f"""<!doctype html>
 {body}
 <script>window.PUPPET_CHARACTERS = {json.dumps(characters)};</script>
 <script>window.PUPPET_EXAMPLES = {json.dumps(examples)};</script>
+<script>window.PUPPET_AUDIO = {json.dumps(audio)};</script>
 <script>
 {shim_js}
 </script>
@@ -76,4 +86,5 @@ def GET(request):
 OUT.parent.mkdir(parents=True, exist_ok=True)
 OUT.write_text(stage_py)
 print(f"wrote {OUT} ({len(stage_py)//1024} KB, characters: {', '.join(characters)}, "
-      f"examples: {', '.join(examples)})")
+      f"examples: {', '.join(examples)}, music: {', '.join(audio['music'])}, "
+      f"sfx: {', '.join(audio['sfx'])})")

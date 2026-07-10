@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 200">
+  <g id="stand">
+    <path d="M60,120 L30,192" stroke="#6b4a2f" stroke-width="8" stroke-linecap="round"/>
+    <path d="M100,120 L130,192" stroke="#6b4a2f" stroke-width="8" stroke-linecap="round"/>
+    <rect x="18" y="188" width="30" height="8" rx="3" fill="#523a24"/>
+    <rect x="112" y="188" width="30" height="8" rx="3" fill="#523a24"/>
+  </g>
+  <g id="fringe" fill="#e34f4f">
+    <path d="M25,58 L14,40 L34,50 Z"/>
+    <path d="M45,35 L38,15 L58,28 Z"/>
+    <path d="M72,24 L72,4 L92,20 Z"/>
+    <path d="M100,30 L112,12 L118,32 Z"/>
+    <path d="M122,52 L138,38 L128,58 Z"/>
+  </g>
+  <!-- open ring: fill:none keeps the center fully transparent so a character can pass through -->
+  <circle cx="80" cy="80" r="55" fill="none" stroke="#c23b3b" stroke-width="11"/>
+  <circle cx="80" cy="80" r="55" fill="none" stroke="#8f2626" stroke-width="3" opacity="0.6"/>
+</svg>
