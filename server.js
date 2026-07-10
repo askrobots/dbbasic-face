@@ -271,7 +271,17 @@ function parseKV(str) {
  *   [frame right clear]   → remove a frame
  *   [scene desk]           → set the active frame's background
  *   [show image:chart fit:contain]  → content tile in the active frame
- *   [lower-third "Ava Reyes" "Host"] → overlay
+ *   [lower-third "Ava Reyes" "Host"] → overlay, auto-dismissed after a
+ *                             6000ms hold by default; add a trailing
+ *                             `hold:<ms>` to override (`hold:0` persists —
+ *                             no auto-dismiss — matching the old behavior)
+ *   [lower-third clear]    → remove the current lower-third early
+ *   [clear]                 → wipe every placed actor (and its worn props),
+ *                             every frame's content tile, and every overlay
+ *                             across the whole stage — the same cleanup a
+ *                             new script runs automatically on script-start.
+ *                             Music, captions on/off, backgrounds, and frame
+ *                             layout are left alone.
  *   [captions on|off]      → toggle the caption bar (default on)
  *   [iris out|in 900], [fade out|in 900]  → fullscreen transition
  *                             (ms optional, default 700)
@@ -398,10 +408,17 @@ function directionCue(body, source, frameIds, actorIds) {
       return { type: 'overlay-clear', id: 'lower-third', source };
     }
     const strs = [...body.matchAll(/"([^"]*)"/g)].map((m) => m[1]);
-    return {
+    const cue = {
       type: 'overlay', template: 'lower-third', id: 'lower-third',
       slots: { title: strs[0] || '', subtitle: strs[1] || '' }, source,
     };
+    // Optional trailing `hold:<ms>` key: default 6000 (auto-dismiss after
+    // 6s) when omitted; `hold:0` means persist (omit hold entirely, same as
+    // the old un-timed behavior); any other value is that hold in ms.
+    const holdMatch = body.match(/\bhold:(\d+)\b/i);
+    const holdMs = holdMatch ? parseInt(holdMatch[1], 10) : 6000;
+    if (holdMs > 0) cue.hold = holdMs;
+    return cue;
   }
 
   if (head === 'walk' || head === 'enter' || head === 'exit') {
@@ -503,6 +520,12 @@ function directionCue(body, source, frameIds, actorIds) {
     sub.actor = head;
     return sub;
   }
+
+  // [clear] — wipe placed actors/worn props/content tiles/overlays across
+  // every frame, on demand mid-script (same cleanup `script-start` runs
+  // automatically). Music, captions on/off, backgrounds, and frame layout
+  // are untouched.
+  if (head === 'clear') return { type: 'clear', source };
 
   return { type: 'action', name: head, source };
 }

@@ -68,8 +68,14 @@
   .overlay svg, .overlay img { width: 100%; height: 100%; display: block; }
 
   /* ---- captions: broadcast subtitle bar, above overlays */
+  /* bottom nudged up from the original 8%: the lower-third overlay's bars
+     now occupy roughly the bottom 4%-23% of stage height (see
+     assets/overlays/lower-third.svg), which the old 8% caption position
+     sat squarely inside of. 25% clears that band so a long caption line
+     (which can stretch left past center at max-width) doesn't collide with
+     a lower-left lower-third billboard shown at the same time. */
   #captions {
-    position: absolute; left: 50%; bottom: 8%; transform: translateX(-50%);
+    position: absolute; left: 50%; bottom: 25%; transform: translateX(-50%);
     max-width: 82%; padding: 8px 18px; border-radius: 10px;
     background: rgba(10,12,18,.72); color: #fff; font-size: 20px; line-height: 1.4;
     text-align: center; pointer-events: none; z-index: 6;
@@ -130,6 +136,8 @@
   button.primary:hover { background: #5c7cfa; }
   input[type=range] { width: 100%; }
   label { font-size: 12px; color: #8b93ab; }
+  #record-toggle.rec-on { background: #b33; border-color: #b33; }
+  #record-toggle.rec-on:hover { background: #c44; }
 </style>
 </head>
 <body>
@@ -197,6 +205,13 @@
       </div>
     </section>
 
+    <section id="music-section" style="display:none">
+      <h2>Music</h2>
+      <select id="music-select"><option value="">music…</option></select>
+      <button type="button" id="music-off">⏹ music off</button>
+      <div class="chips" id="sfx-buttons"></div>
+    </section>
+
     <section>
       <label>walk to position</label>
       <input type="range" id="walk" min="5" max="95" value="50">
@@ -207,6 +222,7 @@
       <div class="row" id="example-row">
         <select id="example"><option value="">example…</option></select>
         <button type="button" id="load-example" style="flex:0 0 auto">Load</button>
+        <button type="button" id="record-toggle" style="flex:0 0 auto">● Record</button>
       </div>
       <textarea id="script" spellcheck="false"></textarea>
       <div class="row">
@@ -217,8 +233,12 @@
   </aside>
 
   <script>
-    // ?shot: hold the load event open so headless screenshots capture the booted stage
-    if (location.search.includes('shot')) document.write('<img src="/slowpx?d=3000" style="display:none">');
+    // ?shot: hold the load event open so headless screenshots capture the booted
+    // stage; ?shot&d=8000 extends the hold for later scene states (default 3s)
+    if (location.search.includes('shot')) {
+      const m = location.search.match(/d=(\d+)/);
+      document.write('<img src="/slowpx?d=' + (m ? m[1] : 3000) + '" style="display:none">');
+    }
   </script>
   <script src="stage.js"></script>
 </body>

@@ -810,6 +810,31 @@ class Stage {
     f.actors.delete(actor.id);
   }
 
+  // ------------------------------------------------------- full-stage reset
+  //
+  // Shared by the `script-start` cue (a new script is about to run) and the
+  // `[clear]` mid-script direction: wipes everything a script builds up on
+  // top of a frame — placed actors and their speech, worn props, content
+  // tiles, and overlays — so a re-run (or a mid-show reset) starts from a
+  // clean stage. Deliberately leaves music (it survives script-start by
+  // spec), captions on/off state, backgrounds, and the frame layout itself
+  // untouched — those aren't "things a script builds up", they're ambient
+  // stage state.
+  clearAll() {
+    for (const f of this.frames.values()) {
+      if (f.puppet) {
+        for (const anchor of [...f.puppet.wornProps.keys()]) f.puppet.unwear(anchor);
+        f.puppet.stopSpeaking();
+      }
+      for (const actor of [...f.actors.values()]) {
+        if (actor.puppet) for (const anchor of [...actor.puppet.wornProps.keys()]) actor.puppet.unwear(anchor);
+        this.destroyActor(f, actor); // stops actor speech + removes its DOM
+      }
+      f.contentEl.innerHTML = '';
+    }
+    this.overlayClear();
+  }
+
   // Resolves the actor named by cue.actor, scoped to cue.frame (or the
   // active frame) first; if no frame was explicitly given, falls back to a
   // search across every frame (actor ids are typically unique stage-wide).
@@ -1374,20 +1399,23 @@ function handleCue(cue) {
       break;
     }
     case 'script-start':
-      for (const f of stage.frames.values()) {
-        if (f.puppet) f.puppet.stopSpeaking();
-        for (const a of f.actors.values()) if (a.puppet) a.puppet.stopSpeaking();
-      }
+      stage.clearAll();
       prompterStart(cue.lines);
       break;
     case 'script-line': prompterHighlight(cue.index); break;
     case 'script-end': prompterEnd(); break;
+    case 'clear': stage.clearAll(); break;
     case 'error': toast(cue.message); break;
   }
 }
 
 const events = new EventSource('/api/events');
 events.onmessage = (e) => handleCue(JSON.parse(e.data));
+
+// surface runtime errors on the stage itself — invaluable when a cue breaks
+window.addEventListener('error', (e) => toast(`js error: ${e.message}`));
+window.addEventListener('unhandledrejection', (e) =>
+  toast(`js error: ${(e.reason && e.reason.message) || e.reason}`));
 
 // Any user gesture unlocks/keeps-alive every puppet's audio context, so
 // speech cues arriving later over SSE are allowed to make sound (Safari
@@ -1471,6 +1499,28 @@ function toast(msg) {
 
 let targetFrame = 'main';
 
+// -------------------------------------------------------------- record mode
+//
+// When active, every PANEL-initiated action (not incoming SSE cues, and
+// never Run/Stop/Load) appends its screenplay-grammar equivalent to the
+// #script textarea, so a user can drive the puppet by hand and end up with a
+// runnable script. `chipsVisible()` mirrors the same single/multi-frame
+// branch every other panel control already uses to decide whether to target
+// `targetFrame` explicitly.
+
+let recording = false;
+
+function chipsVisible() {
+  return $id('frame-target').style.display !== 'none';
+}
+
+function record(line) {
+  if (!recording) return;
+  const ta = $id('script');
+  ta.value = ta.value ? ta.value + '\n' + line : line;
+  ta.scrollTop = ta.scrollHeight;
+}
+
 async function post(url, body) {
   const r = await fetch(url, {
     method: 'POST',
@@ -1490,9 +1540,16 @@ $id('say-form').addEventListener('submit', (e) => {
     voice: $id('voice').value,
     frame: targetFrame,
   });
+  record(chipsVisible() ? `${targetFrame}: ${text}` : text);
 });
 
-$id('engine').addEventListener('change', loadVoices);
+$id('engine').addEventListener('change', (e) => {
+  loadVoices();
+  record(`[engine ${e.target.value}]`);
+});
+$id('voice').addEventListener('change', (e) => {
+  record(`[voice ${e.target.value}]`);
+});
 
 // audio diagnostics: state readout + a beep through the same output path
 $id('beep').onclick = async () => {
@@ -1539,37 +1596,52 @@ function buildActionButtons() {
   for (const name of Object.keys((p && p.manifest || {}).actions || {})) {
     const b = document.createElement('button');
     b.textContent = name;
-    b.onclick = () => post('/api/cue', { type: 'action', name, frame: targetFrame });
+    b.onclick = () => {
+      post('/api/cue', { type: 'action', name, frame: targetFrame });
+      record(chipsVisible() ? `[${targetFrame} ${name}]` : `[${name}]`);
+    };
     box.appendChild(b);
   }
   for (const dir of ['left', 'front', 'right']) {
     const b = document.createElement('button');
     b.textContent = `look ${dir}`;
-    b.onclick = () => post('/api/cue', { type: 'look', dir, frame: targetFrame });
+    b.onclick = () => {
+      post('/api/cue', { type: 'look', dir, frame: targetFrame });
+      record(chipsVisible() ? `[${targetFrame} look ${dir}]` : `[look ${dir}]`);
+    };
     box.appendChild(b);
   }
   for (const mode of ['face', 'body']) {
     const b = document.createElement('button');
     b.textContent = `🎥 ${mode}`;
-    b.onclick = () => post('/api/cue', { type: 'view', mode, frame: targetFrame });
+    b.onclick = () => {
+      post('/api/cue', { type: 'view', mode, frame: targetFrame });
+      record(chipsVisible() ? `[${targetFrame} view ${mode}]` : `[view ${mode}]`);
+    };
     box.appendChild(b);
   }
 }
 
 $id('walk').addEventListener('change', (e) => {
-  post('/api/cue', { type: 'walk', x: parseInt(e.target.value, 10), frame: targetFrame });
+  const x = parseInt(e.target.value, 10);
+  post('/api/cue', { type: 'walk', x, frame: targetFrame });
+  record(chipsVisible() ? `[${targetFrame} walk ${x}]` : `[walk to ${x}]`);
 });
 
 // -------------------------------------------------------------- scene
 
 for (const btn of document.querySelectorAll('#layout-buttons button')) {
-  btn.onclick = () => post('/api/cue', { type: 'layout', preset: btn.dataset.preset });
+  btn.onclick = () => {
+    post('/api/cue', { type: 'layout', preset: btn.dataset.preset });
+    record(`[layout ${btn.dataset.preset}]`);
+  };
 }
 
 $id('scene-bg').addEventListener('change', (e) => {
   const bg = e.target.value;
   if (!bg) return;
   post('/api/cue', { type: 'scene', bg }); // targets the active frame server-side
+  record(chipsVisible() ? `[${targetFrame} scene ${bg}]` : `[scene ${bg}]`);
   e.target.value = ''; // picker, not a state display
 });
 
@@ -1579,26 +1651,66 @@ $id('captions-toggle').onclick = (e) => {
   post('/api/cue', { type: 'captions', on: captionsOn });
   e.target.textContent = captionsOn ? 'CC on' : 'CC off';
   e.target.classList.toggle('on', captionsOn);
+  record(captionsOn ? '[captions on]' : '[captions off]');
 };
 
 for (const btn of document.querySelectorAll('[data-transition-name]')) {
-  btn.onclick = () => post('/api/cue', {
-    type: 'transition', name: btn.dataset.transitionName, dir: btn.dataset.transitionDir,
-  });
+  btn.onclick = () => {
+    post('/api/cue', {
+      type: 'transition', name: btn.dataset.transitionName, dir: btn.dataset.transitionDir,
+    });
+    record(`[${btn.dataset.transitionName} ${btn.dataset.transitionDir}]`);
+  };
 }
 
 async function loadAssets() {
   try {
-    const { backgrounds } = await (await fetch('/api/assets')).json();
+    const { backgrounds, music, sfx } = await (await fetch('/api/assets')).json();
     const sel = $id('scene-bg');
-    if (!backgrounds || !backgrounds.length) { sel.style.display = 'none'; return; }
-    for (const id of backgrounds) {
+    if (!backgrounds || !backgrounds.length) { sel.style.display = 'none'; }
+    for (const id of backgrounds || []) {
       const o = document.createElement('option');
       o.value = o.textContent = id;
       sel.appendChild(o);
     }
+
+    const musicSection = $id('music-section');
+    if ((!music || !music.length) && (!sfx || !sfx.length)) { musicSection.style.display = 'none'; return; }
+    musicSection.style.display = '';
+
+    const musicSel = $id('music-select');
+    for (const id of music || []) {
+      const o = document.createElement('option');
+      o.value = o.textContent = id;
+      musicSel.appendChild(o);
+    }
+
+    const sfxBox = $id('sfx-buttons');
+    for (const id of sfx || []) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = `🔔 ${id}`;
+      b.onclick = () => {
+        post('/api/cue', { type: 'sfx', id });
+        record(`[sfx ${id}]`);
+      };
+      sfxBox.appendChild(b);
+    }
   } catch { /* asset list is a nicety */ }
 }
+
+$id('music-select').addEventListener('change', (e) => {
+  const id = e.target.value;
+  if (!id) return;
+  post('/api/cue', { type: 'music', id });
+  record(`[music ${id}]`);
+  e.target.value = ''; // picker, not a state display
+});
+
+$id('music-off').onclick = () => {
+  post('/api/cue', { type: 'music', off: true });
+  record('[music off]');
+};
 
 // ---------------------------------------------------------------- examples
 
@@ -1631,6 +1743,12 @@ $id('run-script').onclick = () => {
 };
 $id('stop-script').onclick = () => post('/api/script/stop', {});
 
+$id('record-toggle').onclick = (e) => {
+  recording = !recording;
+  e.target.textContent = recording ? '● Recording' : '● Record';
+  e.target.classList.toggle('rec-on', recording);
+};
+
 // Applies a puppet's manifest-declared voice preference (engine + voice) to
 // the engine/voice selects, refreshing the voice list in between so the
 // preferred voice is actually a valid option by the time it's set. Shared
@@ -1658,6 +1776,7 @@ async function loadCharacter(name, frameId = 'main', extra = {}) {
 
 $id('character').addEventListener('change', (e) => {
   post('/api/cue', { type: 'character', name: e.target.value, frame: targetFrame });
+  record(`[frame ${targetFrame} character:${e.target.value}]`);
 });
 
 // -------------------------------------------------------- frame targeting

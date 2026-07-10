@@ -147,7 +147,14 @@
         return { type: 'overlay-clear', id: 'lower-third' };
       }
       const strs = [...body.matchAll(/"([^"]*)"/g)].map((m) => m[1]);
-      return { type: 'overlay', template: 'lower-third', id: 'lower-third', slots: { title: strs[0] || '', subtitle: strs[1] || '' } };
+      const cue = { type: 'overlay', template: 'lower-third', id: 'lower-third', slots: { title: strs[0] || '', subtitle: strs[1] || '' } };
+      // Optional trailing `hold:<ms>` key: default 6000 (auto-dismiss after
+      // 6s) when omitted; `hold:0` means persist (omit hold entirely); any
+      // other value is that hold in ms. Mirrors server.js exactly.
+      const holdMatch = body.match(/\bhold:(\d+)\b/i);
+      const holdMs = holdMatch ? parseInt(holdMatch[1], 10) : 6000;
+      if (holdMs > 0) cue.hold = holdMs;
+      return cue;
     }
 
     if (head === 'walk' || head === 'enter' || head === 'exit') {
@@ -243,6 +250,10 @@
       sub.actor = head;
       return sub;
     }
+
+    // [clear] — wipe placed actors/worn props/content tiles/overlays across
+    // every frame, on demand mid-script (mirrors server.js exactly).
+    if (head === 'clear') return { type: 'clear' };
 
     return { type: 'action', name: head };
   }
