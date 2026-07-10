@@ -163,6 +163,14 @@
     if (head === 'engine' || head === 'voice' || head === 'rate') {
       return { type: 'setting', key: head, value: parts.slice(1).join(' ') };
     }
+    if (head === 'captions') {
+      const arg = (parts[1] || 'on').toLowerCase();
+      return { type: 'captions', on: arg !== 'off' };
+    }
+    if (head === 'iris' || head === 'fade') {
+      const ms = parseInt(parts[2], 10);
+      return { type: 'transition', name: head, dir: (parts[1] || 'out').toLowerCase(), ms: isNaN(ms) ? 700 : ms };
+    }
 
     if (frameIds.has(head) && parts.length > 1) {
       const sub = directionCue(parts.slice(1).join(' '), frameIds);
@@ -246,7 +254,7 @@
     }
   }
 
-  const RENDER_WINDOW = 3;
+  const RENDER_WINDOW = 4;
 
   async function runScript(src, mainCharacter) {
     const token = ++scriptToken;
@@ -267,10 +275,20 @@
       }
     }
 
-    await postCue({ type: 'script-start', lines: cues.map((c) => c.source) });
-
     for (let k = 0; k < RENDER_WINDOW; k++) ensureRender(k);
     let speakIndex = 0;
+
+    if (speakCues.length > 0) {
+      try {
+        await speakCues[0]._renderP;
+      } catch (e) {
+        // ignore here; the playback loop's per-line error handling will surface
+        // this once it reaches line 1
+      }
+      if (token !== scriptToken) return; // replaced while pre-rendering; don't start
+    }
+
+    await postCue({ type: 'script-start', lines: cues.map((c) => c.source) });
 
     for (let i = 0; i < cues.length; i++) {
       if (token !== scriptToken) break;
@@ -299,6 +317,7 @@
       await postCue(cue);
       if (cue.type === 'action') await sleep((ACTION_SECONDS[cue.name] || 1) * 1000);
       else if (cue.type === 'walk') await sleep(1200);
+      else if (cue.type === 'transition') await sleep(cue.ms + 100);
       else await sleep(400);
     }
     if (token === scriptToken) await postCue({ type: 'script-end' });

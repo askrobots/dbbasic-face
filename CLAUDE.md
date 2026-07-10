@@ -23,6 +23,9 @@ code and the invariants that are easy to break.
   served like `characters/`. An id resolves format-agnostically (`.svg`
   first, then raster) so an AI-generated PNG drops into the same slot as a
   hand-authored SVG with no code change.
+- `examples/<name>.txt` — runnable screenplays (paste into the Screenplay box
+  or `POST /api/script`); `troll-fable.txt` exercises frames, lower-thirds,
+  captions, and transitions together. See `examples/README.md`.
 - `cache/` — generated audio + viseme JSON, keyed by content hash. Disposable.
 - `tools/` — Rhubarb binary, installed by `setup.sh`. Both gitignored.
 - `integrations/dbbasic/` — the app packaged for dbbasic-object-server
@@ -31,7 +34,8 @@ code and the invariants that are easy to break.
   hand, and re-run `build.py` after frontend/character changes.
   NOTE: test the package against a throwaway clone of the object server —
   never a live or shared checkout you don't own.
-- The screenplay grammar (including frame/scene/overlay directions) lives in
+- The screenplay grammar (including frame/scene/overlay directions, plus
+  `captions on|off` and `iris|fade in|out [ms]` transition cues) lives in
   BOTH `server.js` (`parseScript` / `directionCue`) and
   `integrations/dbbasic/shim.js`. Keep them in sync, then re-run `build.py`.
 

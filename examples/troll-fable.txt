@@ -1,0 +1,32 @@
+# A tiny fable: how a troll borrows the mind you hand over.
+[captions on]
+[layout single]
+[fade in 900]
+[frame main character:bo bg:room view:body]
+[emote happy]
+Gather round. Watch how easily a good mind is turned, if you know the levers.
+[layout split]
+[frame left character:bo bg:room view:face]
+[frame right character:ava bg:sky view:face]
+[lower-third "The lever" "Flattery"]
+left: Ava, you are far too clever for this dull town. Surely only you could carry my golden box to the hilltop.
+right: Well. I am rather clever. I suppose I could.
+[left emote happy] [right nod]
+[lower-third "The lever" "Urgency"]
+left: Quickly now, the magic fades at noon! No time to think, only to act.
+right: Oh! Then I mustn't hesitate.
+[right emote surprised]
+left: Off you go, clever one. Quick, quick!
+[frame right clear]
+[frame right character:pip bg:sky view:body]
+[lower-third "The lever" "Everyone is doing it"]
+left: And here is little Pip, already on his way. You would not want to be the last, would you?
+[right nod] [right walk 80]
+[lower-third clear]
+[layout single]
+[frame main character:bo bg:room view:body]
+[emote happy]
+And so the clever and the kind both marched up the hill, for nothing but my say so.
+The trick was never magic. It was flattery, hurry, and the fear of standing alone.
+(bow) Guard your reasons, friends. A troll only borrows the mind you hand over.
+[iris out 1200]

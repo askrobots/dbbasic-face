@@ -244,10 +244,26 @@ file swap with no code change.
   its own clip. Multiple frames can speak, but sequential is the norm (the
   script runner already paces one line at a time).
 
+## Now implemented: captions and iris/fade takes
+
+Two items from the original out-of-scope list have shipped:
+
+- **Captions** — `{ "type": "captions", "on": true|false }`. Toggles a
+  broadcast-style subtitle rendered at the bottom of the stage for each
+  spoken line; useful for muted/silent playback. Screenplay: `[captions on]`
+  / `[captions off]`.
+- **Transitions (iris / fade takes)** — `{ "type": "transition", "name":
+  "iris"|"fade", "dir": "out"|"in", "ms": 700 }`. A fullscreen take: the
+  vintage circular wipe (`iris`) or a fade to/from black (`fade`). Screenplay:
+  `[iris out]`, `[iris in]`, `[fade out]`, `[fade in]`, with an optional
+  trailing duration in ms (default 700). Neither is a persistent overlay or a
+  scene-change modifier — they're standalone fullscreen cues a script fires
+  directly, same as any other direction.
+
 ## Out of scope (later, same primitives)
 
-Transitions (dissolve/wipe/stinger/iris), persistent overlays (bug, ticker,
-captions), fx packs, audio/music beds, parallax backgrounds, and full-frame
-"takes" (intro/credits/cards). All are new templates or a transition modifier
-on scene/frame changes — none require new core primitives beyond what is
-specified here.
+Other transitions (dissolve/wipe/stinger beyond iris/fade), persistent
+overlays (bug, ticker), fx packs, audio/music beds, parallax backgrounds, and
+full-frame "takes" beyond iris/fade (intro/credits/cards). All are new
+templates or a transition modifier on scene/frame changes — none require new
+core primitives beyond what is specified here.

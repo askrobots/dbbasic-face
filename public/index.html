@@ -56,6 +56,25 @@
   .overlay.shown { opacity: 1; }
   .overlay svg, .overlay img { width: 100%; height: 100%; display: block; }
 
+  /* ---- captions: broadcast subtitle bar, above overlays */
+  #captions {
+    position: absolute; left: 50%; bottom: 8%; transform: translateX(-50%);
+    max-width: 82%; padding: 8px 18px; border-radius: 10px;
+    background: rgba(10,12,18,.72); color: #fff; font-size: 20px; line-height: 1.4;
+    text-align: center; pointer-events: none; z-index: 6;
+    opacity: 0; transition: opacity .15s ease;
+  }
+  #captions.shown { opacity: 1; }
+
+  /* ---- take: fullscreen transitions (iris/fade), above captions */
+  #take { position: absolute; inset: 0; pointer-events: none; z-index: 7; display: none; }
+  #take .iris-hole {
+    position: absolute; top: 50%; left: 50%; width: 0; height: 0;
+    border-radius: 50%; background: transparent;
+    box-shadow: 0 0 0 9999px #000; transform: translate(-50%, -50%);
+    display: none;
+  }
+
   #prompter {
     position: absolute; left: 12px; top: 12px; width: 300px; max-height: 45%;
     overflow-y: auto; padding: 10px 12px; border-radius: 10px;
@@ -103,6 +122,8 @@
     <div id="stage">
       <div id="frames"></div>
       <div id="overlays"></div>
+      <div id="captions"></div>
+      <div id="take"><div class="iris-hole"></div></div>
       <div id="prompter"></div>
       <div id="toast"></div>
     </div>

@@ -8,6 +8,9 @@ code.
 
 Zero npm dependencies. One Node server, one static page.
 
+Puppetry is the oldest performing art — five thousand years old, give or
+take — this just wires it to the newest.
+
 ![Puppet Stage](docs/screenshot.png)
 *Ava, mid-scene, with the control panel.*
 
@@ -68,8 +71,10 @@ And back again.
 Directions: `walk to N`, `enter from left|right`, `exit left|right`,
 `wait N`, `look left|right|up|down|front`, `emote <name>`,
 `view face|body` (camera close-up / full stage), `engine say|espeak`,
-`voice <name>`, `rate <n>`, or any action name from the character's manifest
-(`wave`, `jump`, `nod`, `shake`, `bow`, `dance`, `shrug`, …).
+`voice <name>`, `rate <n>`, `captions on|off` (broadcast-style subtitles for
+spoken lines), `iris|fade in|out [ms]` (fullscreen takes — circular wipe or
+fade-to-black, default 700ms), or any action name from the character's
+manifest (`wave`, `jump`, `nod`, `shake`, `bow`, `dance`, `shrug`, …).
 
 Two characters ship as references: `pip`, a cartoon blob showing the minimal
 contract, and `ava`, a semi-realistic young woman showing the full contract —
@@ -177,12 +182,32 @@ users: `frame`, `frame-clear`, `layout`, `content`, `scene`, `overlay` —
 existing character cues (`speak`, `action`, `walk`, `look`, `view`,
 `character`) now also accept an optional `frame` field.
 
+Two more directions dress up a scene like a broadcast: `[captions on]` renders
+each spoken line as a subtitle at the bottom of the stage — handy for muted or
+silent playback — and `[iris out]` / `[fade out]` (with `[iris in]` / `[fade
+in]` to return) do a fullscreen take: the vintage circular wipe, or a fade
+to/from black. Both take an optional trailing duration in ms.
+
+```text
+[fade in 900]
+[captions on]
+Where we left off.
+[iris out 1200]
+```
+
 A starter asset pack ships in `assets/`: backgrounds `desk`, `sky`, and
 `room`, a few props, and the `lower-third` overlay template, plus a second
 character, `bo`, in a vintage rubber-hose style. See
 [docs/authoring-assets.md](docs/authoring-assets.md) for adding your own, and
 [docs/design/frames-and-scenes.md](docs/design/frames-and-scenes.md) for the
 full cue schema and screenplay grammar.
+
+## Examples
+
+[examples/troll-fable.txt](examples/troll-fable.txt) is a runnable two-
+character screenplay — a fable about manipulation tactics (flattery, urgency,
+social proof) — exercising frames, lower-thirds, captions, and transitions
+together. Paste it into the Screenplay box and hit Run.
 
 ## Notes & troubleshooting
 
@@ -193,6 +218,8 @@ full cue schema and screenplay grammar.
   silent too → browser/system output problem; beep audible → file an issue.
 - Rendered speech is cached in `cache/`, keyed by engine + voice + text.
   Safe to delete anytime.
+- Screenplays pre-render all their speech before playback starts, so shows
+  begin tight and play with no render gaps between lines.
 - Rhubarb's macOS build is x86_64; it runs under Rosetta on Apple Silicon.
 - Without Rhubarb the app still works — mouths fall back to loudness-driven
   movement instead of phoneme shapes.

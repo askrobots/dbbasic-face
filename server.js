@@ -265,6 +265,9 @@ function parseKV(str) {
  *   [scene desk]           → set the active frame's background
  *   [show image:chart fit:contain]  → content tile in the active frame
  *   [lower-third "Ava Reyes" "Host"] → overlay
+ *   [captions on|off]      → toggle the caption bar (default on)
+ *   [iris out|in 900], [fade out|in 900]  → fullscreen transition
+ *                             (ms optional, default 700)
  *   left: Good evening.    → speak cue targeting frame "left" (id must be
  *                             a frame declared earlier in the script)
  *   [left wave]            → direction targeting frame "left"
@@ -380,6 +383,14 @@ function directionCue(body, source, frameIds) {
   if (head === 'engine' || head === 'voice' || head === 'rate') {
     return { type: 'setting', key: head, value: parts.slice(1).join(' '), source };
   }
+  if (head === 'captions') {
+    const arg = (parts[1] || 'on').toLowerCase();
+    return { type: 'captions', on: arg !== 'off', source };
+  }
+  if (head === 'iris' || head === 'fade') {
+    const ms = parseInt(parts[2], 10);
+    return { type: 'transition', name: head, dir: (parts[1] || 'out').toLowerCase(), ms: isNaN(ms) ? 700 : ms, source };
+  }
 
   // [<id> <direction...>] — first token is a known frame id: apply the rest
   // of the direction to that frame.
@@ -448,7 +459,7 @@ function resolveSpeech(cues, mainCharacter) {
   }
 }
 
-const RENDER_WINDOW = 3;
+const RENDER_WINDOW = 4;
 
 async function runScript(src, mainCharacter) {
   const token = ++scriptToken;
@@ -468,10 +479,20 @@ async function runScript(src, mainCharacter) {
     }
   }
 
-  broadcast({ type: 'script-start', lines: cues.map((c) => c.source) });
-
   for (let k = 0; k < RENDER_WINDOW; k++) ensureRender(k);
   let speakIndex = 0;
+
+  if (speakCues.length > 0) {
+    try {
+      await speakCues[0]._renderP;
+    } catch (e) {
+      // ignore here; the playback loop's per-line error handling will surface
+      // this once it reaches line 1
+    }
+    if (token !== scriptToken) return; // replaced while pre-rendering; don't start
+  }
+
+  broadcast({ type: 'script-start', lines: cues.map((c) => c.source) });
 
   for (let i = 0; i < cues.length; i++) {
     if (token !== scriptToken) break; // stopped or replaced
@@ -507,6 +528,7 @@ async function runScript(src, mainCharacter) {
     broadcast(cue);
     if (cue.type === 'action') await sleep((ACTION_SECONDS[cue.name] || 1) * 1000);
     else if (cue.type === 'walk') await sleep(1200);
+    else if (cue.type === 'transition') await sleep(cue.ms + 100);
     else await sleep(400);
   }
 

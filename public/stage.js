@@ -370,7 +370,7 @@ class Puppet {
 // puppet on one full-stage frame.
 
 class Stage {
-  constructor(framesEl, overlaysEl) {
+  constructor(framesEl, overlaysEl, captionsEl, takeEl) {
     this.framesEl = framesEl;
     this.overlaysEl = overlaysEl;
     this.frames = new Map();
@@ -380,6 +380,16 @@ class Stage {
     this.overlayCache = new Map();
     this.autoSlots = ['left', 'right'];
     this.autoIdx = 0;
+
+    // captions: last-speaker-wins subtitle bar, off by default
+    this.captionsEl = captionsEl;
+    this.captionsOn = false;
+    this.captionsTimer = null;
+
+    // take: fullscreen transitions (iris/fade) share one layer + hole child
+    this.takeEl = takeEl;
+    this.holeEl = takeEl && takeEl.querySelector('.iris-hole');
+    this.takeAnim = null;
   }
 
   ensureFrame(id) { return this.frames.get(id) || this.createFrame(id); }
@@ -585,6 +595,85 @@ class Stage {
     }
   }
 
+  // ------------------------------------------------------------ captions
+
+  captions(cue) {
+    this.captionsOn = cue.on !== false;
+    if (!this.captionsOn) this.hideCaption();
+  }
+
+  showCaption(cue) {
+    if (!this.captionsOn) return;
+    clearTimeout(this.captionsTimer);
+    this.captionsEl.textContent = cue.text;
+    this.captionsEl.classList.add('shown');
+    this.captionsTimer = setTimeout(() => this.hideCaption(), (cue.duration || 0) * 1000 + 300);
+  }
+
+  hideCaption() {
+    clearTimeout(this.captionsTimer);
+    this.captionsTimer = null;
+    this.captionsEl.classList.remove('shown');
+    this.captionsEl.textContent = '';
+  }
+
+  // --------------------------------------------------------- transitions
+  //
+  // #take is one shared layer for both fade and iris: fade animates the
+  // layer's own opacity (a flat black fill); iris animates a child "hole"
+  // element's diameter, whose box-shadow paints black everywhere outside
+  // it (clipped to #stage by #stage's overflow:hidden). Each call resets
+  // whichever mode isn't in use so the two never fight over #take's state.
+
+  transition(cue) {
+    if (this.takeAnim) { this.takeAnim.cancel(); this.takeAnim = null; }
+    const ms = cue.ms || 700;
+    if (cue.name === 'iris') this.irisTransition(cue.dir, ms);
+    else this.fadeTransition(cue.dir, ms);
+  }
+
+  fadeTransition(dir, ms) {
+    const el = this.takeEl;
+    if (this.holeEl) this.holeEl.style.display = 'none';
+    el.style.display = 'block';
+    el.style.background = '#000';
+    const from = dir === 'in' ? 1 : 0;
+    const to = dir === 'in' ? 0 : 1;
+    el.style.opacity = from;
+    const anim = el.animate([{ opacity: from }, { opacity: to }], { duration: ms, easing: 'linear', fill: 'forwards' });
+    this.takeAnim = anim;
+    anim.finished.then(() => {
+      if (this.takeAnim !== anim) return;
+      el.style.opacity = to;
+      if (dir === 'in') el.style.display = 'none';
+    }).catch(() => {});
+  }
+
+  irisTransition(dir, ms) {
+    const el = this.takeEl;
+    const hole = this.holeEl;
+    if (!hole) return;
+    el.style.background = 'transparent';
+    el.style.opacity = '1';
+    el.style.display = 'block';
+    hole.style.display = 'block';
+    const full = Math.hypot(el.clientWidth, el.clientHeight) + 100; // fully clears the stage
+    const from = dir === 'in' ? 0 : full;
+    const to = dir === 'in' ? full : 0;
+    hole.style.width = from + 'px';
+    hole.style.height = from + 'px';
+    const anim = hole.animate(
+      [{ width: from + 'px', height: from + 'px' }, { width: to + 'px', height: to + 'px' }],
+      { duration: ms, easing: 'linear', fill: 'forwards' });
+    this.takeAnim = anim;
+    anim.finished.then(() => {
+      if (this.takeAnim !== anim) return;
+      hole.style.width = to + 'px';
+      hole.style.height = to + 'px';
+      if (dir === 'in') { el.style.display = 'none'; hole.style.display = 'none'; }
+    }).catch(() => {});
+  }
+
   // ----------------------------------------------- character direction
 
   forFrame(cue) {
@@ -598,7 +687,7 @@ class Stage {
 
 const $id = (i) => document.getElementById(i);
 
-const stage = new Stage($id('frames'), $id('overlays'));
+const stage = new Stage($id('frames'), $id('overlays'), $id('captions'), $id('take'));
 stage.ensureFrame('main'); // boots as one full-size frame + the default character
 
 function mainPuppet() {
@@ -620,7 +709,14 @@ function handleCue(cue) {
     case 'scene': stage.scene(cue); break;
     case 'overlay': stage.overlay(cue); break;
     case 'overlay-clear': stage.overlayClear(cue); break;
-    case 'speak': { const p = stage.forFrame(cue); if (p) p.speak(cue); break; }
+    case 'captions': stage.captions(cue); break;
+    case 'transition': stage.transition(cue); break;
+    case 'speak': {
+      const p = stage.forFrame(cue);
+      if (p) p.speak(cue);
+      stage.showCaption(cue);
+      break;
+    }
     case 'action': { const p = stage.forFrame(cue); if (p) p.act(cue.name); break; }
     case 'walk': { const p = stage.forFrame(cue); if (p) p.walkTo(cue.x, cue.jump || cue.from); break; }
     case 'look': { const p = stage.forFrame(cue); if (p) p.look(cue.dir); break; }
