@@ -138,6 +138,30 @@
   label { font-size: 12px; color: #8b93ab; }
   #record-toggle.rec-on { background: #b33; border-color: #b33; }
   #record-toggle.rec-on:hover { background: #c44; }
+  #wait-btn:disabled { opacity: .4; cursor: default; }
+  #wait-btn:disabled:hover { background: #232735; }
+  #help-toggle { flex: 0 0 auto; font-weight: 700; }
+
+  /* ---- help panel: grammar cheat sheet, over the stage ---- */
+  #help-panel {
+    position: absolute; right: 12px; top: 12px; width: 340px; max-height: 80%;
+    overflow-y: auto; padding: 14px 16px; border-radius: 10px;
+    background: rgba(10,12,18,.88); font-size: 12px; line-height: 1.55;
+    display: none; backdrop-filter: blur(4px); z-index: 11;
+  }
+  #help-panel.active { display: block; }
+  #help-panel h3 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+    color: #8b93ab; margin: 12px 0 4px;
+  }
+  #help-panel h3:first-child { margin-top: 0; }
+  #help-panel dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0; }
+  #help-panel dt { font-family: ui-monospace, monospace; color: #ffd479; white-space: nowrap; }
+  #help-panel dd { margin: 0; color: #c8cede; }
+  #help-close {
+    position: absolute; right: 8px; top: 8px; width: 22px; height: 22px;
+    padding: 0; line-height: 1; font-size: 12px; border-radius: 6px;
+  }
 </style>
 </head>
 <body>
@@ -149,6 +173,71 @@
       <div id="take"><div class="iris-hole"></div></div>
       <div id="prompter"></div>
       <div id="toast"></div>
+      <div id="help-panel">
+        <button type="button" id="help-close">✕</button>
+
+        <h3>Speaking</h3>
+        <dl>
+          <dt>text</dt><dd>speak as the target frame's character</dd>
+          <dt>frame: text</dt><dd>speak on a named frame's character</dd>
+          <dt>(action) text</dt><dd>run an action while the line is spoken</dd>
+        </dl>
+
+        <h3>Movement &amp; camera</h3>
+        <dl>
+          <dt>[wait N]</dt><dd>pause N seconds</dd>
+          <dt>[walk to N]</dt><dd>glide to N% of stage width</dd>
+          <dt>[enter from left|right]</dt><dd>walk on from offstage</dd>
+          <dt>[exit left|right]</dt><dd>walk off that side</dd>
+          <dt>[look left|right|up|down|front]</dt><dd>gaze direction</dd>
+          <dt>[view face|body]</dt><dd>camera close-up / full frame</dd>
+          <dt>[emote name]</dt><dd>alias for a held-pose action</dd>
+          <dt>[wave] [jump] …</dt><dd>any action name from the manifest</dd>
+        </dl>
+
+        <h3>Scene &amp; frames</h3>
+        <dl>
+          <dt>[layout preset]</dt><dd>single|split|thirds|pip-tr|tl|br|bl</dd>
+          <dt>[frame id key:val …]</dt><dd>slot|bg|character|view|facing|rect:x,y,w,h</dd>
+          <dt>[frame id clear]</dt><dd>remove a frame (never the last one)</dd>
+          <dt>[scene bg]</dt><dd>set active frame's background</dd>
+          <dt>[frameId direction]</dt><dd>target that frame, e.g. [left wave]</dd>
+        </dl>
+
+        <h3>Content &amp; overlays</h3>
+        <dl>
+          <dt>[show image:id]</dt><dd>content tile; fit:contain|cover</dd>
+          <dt>[lower-third "a" "b" hold:ms]</dt><dd>title bar (default hold 6000, hold:0 = persist)</dd>
+          <dt>[lower-third clear]</dt><dd>dismiss it early</dd>
+          <dt>[captions on|off]</dt><dd>subtitle bar for spoken lines</dd>
+          <dt>[iris|fade in|out ms]</dt><dd>fullscreen take (default 700ms)</dd>
+        </dl>
+
+        <h3>Audio</h3>
+        <dl>
+          <dt>[music id]</dt><dd>crossfade to a looping track</dd>
+          <dt>[music off]</dt><dd>fade out music</dd>
+          <dt>[sfx id]</dt><dd>one-shot sound effect</dd>
+        </dl>
+
+        <h3>Cast &amp; props</h3>
+        <dl>
+          <dt>[place what at x scale:s]</dt><dd>place a prop/character actor (id: behind: optional)</dd>
+          <dt>[id move N / scale N]</dt><dd>glide / resize a prop actor</dd>
+          <dt>[id spin] [id bounce]</dt><dd>prop actor flourishes</dd>
+          <dt>[wear target prop]</dt><dd>pin a prop to an anchor (default head)</dd>
+          <dt>[unwear target]</dt><dd>remove the worn prop</dd>
+          <dt>[remove id]</dt><dd>destroy a placed actor</dd>
+          <dt>[clear]</dt><dd>wipe actors, worn props, content &amp; overlays</dd>
+        </dl>
+
+        <h3>Settings</h3>
+        <dl>
+          <dt>[engine say|espeak]</dt><dd>switch TTS engine</dd>
+          <dt>[voice name]</dt><dd>set voice for current engine</dd>
+          <dt>[rate n]</dt><dd>TTS speech rate</dd>
+        </dl>
+      </div>
     </div>
   </main>
 
@@ -205,6 +294,21 @@
       </div>
     </section>
 
+    <section id="cast-section" style="display:none">
+      <h2>Cast &amp; Props</h2>
+      <div class="row">
+        <select id="place-what"></select>
+        <input type="number" id="place-x" min="1" max="99" value="50" style="width:64px;flex:0 0 64px">
+        <button type="button" id="place-btn" style="flex:0 0 auto">Place</button>
+      </div>
+      <div class="row">
+        <select id="wear-what"></select>
+        <button type="button" id="wear-btn" style="flex:0 0 auto">Wear</button>
+        <button type="button" id="unwear-btn" style="flex:0 0 auto">Unwear</button>
+      </div>
+      <div class="chips" id="actor-chips" style="display:none"></div>
+    </section>
+
     <section id="music-section" style="display:none">
       <h2>Music</h2>
       <select id="music-select"><option value="">music…</option></select>
@@ -219,10 +323,12 @@
 
     <section>
       <h2>Screenplay</h2>
-      <div class="row" id="example-row">
+      <div class="row" id="example-row" style="flex-wrap:wrap">
         <select id="example"><option value="">example…</option></select>
         <button type="button" id="load-example" style="flex:0 0 auto">Load</button>
         <button type="button" id="record-toggle" style="flex:0 0 auto">● Record</button>
+        <button type="button" id="wait-btn" style="flex:0 0 auto" disabled>+wait 1s</button>
+        <button type="button" id="help-toggle" style="flex:0 0 auto">?</button>
       </div>
       <textarea id="script" spellcheck="false"></textarea>
       <div class="row">

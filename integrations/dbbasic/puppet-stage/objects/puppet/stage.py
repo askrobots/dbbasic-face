@@ -144,6 +144,30 @@ _HTML = r'''<!doctype html>
   label { font-size: 12px; color: #8b93ab; }
   #record-toggle.rec-on { background: #b33; border-color: #b33; }
   #record-toggle.rec-on:hover { background: #c44; }
+  #wait-btn:disabled { opacity: .4; cursor: default; }
+  #wait-btn:disabled:hover { background: #232735; }
+  #help-toggle { flex: 0 0 auto; font-weight: 700; }
+
+  /* ---- help panel: grammar cheat sheet, over the stage ---- */
+  #help-panel {
+    position: absolute; right: 12px; top: 12px; width: 340px; max-height: 80%;
+    overflow-y: auto; padding: 14px 16px; border-radius: 10px;
+    background: rgba(10,12,18,.88); font-size: 12px; line-height: 1.55;
+    display: none; backdrop-filter: blur(4px); z-index: 11;
+  }
+  #help-panel.active { display: block; }
+  #help-panel h3 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+    color: #8b93ab; margin: 12px 0 4px;
+  }
+  #help-panel h3:first-child { margin-top: 0; }
+  #help-panel dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0; }
+  #help-panel dt { font-family: ui-monospace, monospace; color: #ffd479; white-space: nowrap; }
+  #help-panel dd { margin: 0; color: #c8cede; }
+  #help-close {
+    position: absolute; right: 8px; top: 8px; width: 22px; height: 22px;
+    padding: 0; line-height: 1; font-size: 12px; border-radius: 6px;
+  }
 </style>
 </head>
 <body>
@@ -155,6 +179,71 @@ _HTML = r'''<!doctype html>
       <div id="take"><div class="iris-hole"></div></div>
       <div id="prompter"></div>
       <div id="toast"></div>
+      <div id="help-panel">
+        <button type="button" id="help-close">✕</button>
+
+        <h3>Speaking</h3>
+        <dl>
+          <dt>text</dt><dd>speak as the target frame's character</dd>
+          <dt>frame: text</dt><dd>speak on a named frame's character</dd>
+          <dt>(action) text</dt><dd>run an action while the line is spoken</dd>
+        </dl>
+
+        <h3>Movement &amp; camera</h3>
+        <dl>
+          <dt>[wait N]</dt><dd>pause N seconds</dd>
+          <dt>[walk to N]</dt><dd>glide to N% of stage width</dd>
+          <dt>[enter from left|right]</dt><dd>walk on from offstage</dd>
+          <dt>[exit left|right]</dt><dd>walk off that side</dd>
+          <dt>[look left|right|up|down|front]</dt><dd>gaze direction</dd>
+          <dt>[view face|body]</dt><dd>camera close-up / full frame</dd>
+          <dt>[emote name]</dt><dd>alias for a held-pose action</dd>
+          <dt>[wave] [jump] …</dt><dd>any action name from the manifest</dd>
+        </dl>
+
+        <h3>Scene &amp; frames</h3>
+        <dl>
+          <dt>[layout preset]</dt><dd>single|split|thirds|pip-tr|tl|br|bl</dd>
+          <dt>[frame id key:val …]</dt><dd>slot|bg|character|view|facing|rect:x,y,w,h</dd>
+          <dt>[frame id clear]</dt><dd>remove a frame (never the last one)</dd>
+          <dt>[scene bg]</dt><dd>set active frame's background</dd>
+          <dt>[frameId direction]</dt><dd>target that frame, e.g. [left wave]</dd>
+        </dl>
+
+        <h3>Content &amp; overlays</h3>
+        <dl>
+          <dt>[show image:id]</dt><dd>content tile; fit:contain|cover</dd>
+          <dt>[lower-third "a" "b" hold:ms]</dt><dd>title bar (default hold 6000, hold:0 = persist)</dd>
+          <dt>[lower-third clear]</dt><dd>dismiss it early</dd>
+          <dt>[captions on|off]</dt><dd>subtitle bar for spoken lines</dd>
+          <dt>[iris|fade in|out ms]</dt><dd>fullscreen take (default 700ms)</dd>
+        </dl>
+
+        <h3>Audio</h3>
+        <dl>
+          <dt>[music id]</dt><dd>crossfade to a looping track</dd>
+          <dt>[music off]</dt><dd>fade out music</dd>
+          <dt>[sfx id]</dt><dd>one-shot sound effect</dd>
+        </dl>
+
+        <h3>Cast &amp; props</h3>
+        <dl>
+          <dt>[place what at x scale:s]</dt><dd>place a prop/character actor (id: behind: optional)</dd>
+          <dt>[id move N / scale N]</dt><dd>glide / resize a prop actor</dd>
+          <dt>[id spin] [id bounce]</dt><dd>prop actor flourishes</dd>
+          <dt>[wear target prop]</dt><dd>pin a prop to an anchor (default head)</dd>
+          <dt>[unwear target]</dt><dd>remove the worn prop</dd>
+          <dt>[remove id]</dt><dd>destroy a placed actor</dd>
+          <dt>[clear]</dt><dd>wipe actors, worn props, content &amp; overlays</dd>
+        </dl>
+
+        <h3>Settings</h3>
+        <dl>
+          <dt>[engine say|espeak]</dt><dd>switch TTS engine</dd>
+          <dt>[voice name]</dt><dd>set voice for current engine</dd>
+          <dt>[rate n]</dt><dd>TTS speech rate</dd>
+        </dl>
+      </div>
     </div>
   </main>
 
@@ -211,6 +300,21 @@ _HTML = r'''<!doctype html>
       </div>
     </section>
 
+    <section id="cast-section" style="display:none">
+      <h2>Cast &amp; Props</h2>
+      <div class="row">
+        <select id="place-what"></select>
+        <input type="number" id="place-x" min="1" max="99" value="50" style="width:64px;flex:0 0 64px">
+        <button type="button" id="place-btn" style="flex:0 0 auto">Place</button>
+      </div>
+      <div class="row">
+        <select id="wear-what"></select>
+        <button type="button" id="wear-btn" style="flex:0 0 auto">Wear</button>
+        <button type="button" id="unwear-btn" style="flex:0 0 auto">Unwear</button>
+      </div>
+      <div class="chips" id="actor-chips" style="display:none"></div>
+    </section>
+
     <section id="music-section" style="display:none">
       <h2>Music</h2>
       <select id="music-select"><option value="">music…</option></select>
@@ -225,10 +329,12 @@ _HTML = r'''<!doctype html>
 
     <section>
       <h2>Screenplay</h2>
-      <div class="row" id="example-row">
+      <div class="row" id="example-row" style="flex-wrap:wrap">
         <select id="example"><option value="">example…</option></select>
         <button type="button" id="load-example" style="flex:0 0 auto">Load</button>
         <button type="button" id="record-toggle" style="flex:0 0 auto">● Record</button>
+        <button type="button" id="wait-btn" style="flex:0 0 auto" disabled>+wait 1s</button>
+        <button type="button" id="help-toggle" style="flex:0 0 auto">?</button>
       </div>
       <textarea id="script" spellcheck="false"></textarea>
       <div class="row">
@@ -1415,7 +1521,7 @@ class Stage {
   place(cue) {
     const frameId = cue.frame || this.activeId;
     if (cue.frame) this.activeId = frameId;
-    this.placeActor(this.ensureFrame(frameId), cue);
+    return this.placeActor(this.ensureFrame(frameId), cue);
   }
 
   async placeActor(f, cue) {
@@ -2097,13 +2203,17 @@ function handleCue(cue) {
       syncFrameTargets();
       break;
     }
-    case 'frame-clear': stage.frameClear(cue); syncFrameTargets(); break;
-    case 'layout': stage.layout(cue); syncFrameTargets(); break;
+    case 'frame-clear': stage.frameClear(cue); syncFrameTargets(); syncActorChips(); break;
+    case 'layout': stage.layout(cue); syncFrameTargets(); syncActorChips(); break;
     case 'content': stage.content(cue); break;
     case 'content-clear': stage.contentClear(cue); break;
     case 'scene': stage.scene(cue); break;
-    case 'place': stage.place(cue); break;
-    case 'remove': stage.removeActor(cue); break;
+    // place resolves whether `what` is a character or a prop asynchronously
+    // (see Stage.placeActor), so the actor isn't in f.actors until that
+    // settles — sync the chip row off the returned promise rather than
+    // immediately, or a fast click would render the row one place behind.
+    case 'place': stage.place(cue).then(syncActorChips); break;
+    case 'remove': stage.removeActor(cue); syncActorChips(); break;
     case 'move': { const a = stage.resolveActor(cue); if (a) stage.moveActor(a, cue.x); break; }
     case 'scale': { const a = stage.resolveActor(cue); if (a) stage.scaleActor(a, cue.value); break; }
     case 'spin': { const a = stage.resolveActor(cue); if (a) stage.spinActor(a); break; }
@@ -2135,10 +2245,11 @@ function handleCue(cue) {
     case 'script-start':
       stage.clearAll();
       prompterStart(cue.lines);
+      syncActorChips();
       break;
     case 'script-line': prompterHighlight(cue.index); break;
     case 'script-end': prompterEnd(); break;
-    case 'clear': stage.clearAll(); break;
+    case 'clear': stage.clearAll(); syncActorChips(); break;
     case 'error': toast(cue.message); break;
   }
 }
@@ -2233,6 +2344,11 @@ function toast(msg) {
 
 let targetFrame = 'main';
 
+// Character folder names, fetched once at boot; reused by the Cast & Props
+// panel to tell "characters" from "props" in the [place] optgroups without
+// re-probing each asset the way Stage.probeCharacter does per placement.
+let allCharacters = [];
+
 // -------------------------------------------------------------- record mode
 //
 // When active, every PANEL-initiated action (not incoming SSE cues, and
@@ -2244,15 +2360,38 @@ let targetFrame = 'main';
 
 let recording = false;
 
+// Auto-timing: while recording, a gap of more than 1.5s between one
+// recorded line and the next gets a synthetic `[wait <gap>]` inserted ahead
+// of it, so a hand-driven take reproduces roughly the same pacing when
+// replayed. `lastRecordTs` is null right after recording starts (and after
+// each toggle-on) so nothing is ever inserted before a session's first line.
+let lastRecordTs = null;
+const AUTO_WAIT_GAP_S = 1.5;   // gaps shorter than this aren't worth a cue
+const AUTO_WAIT_ROUND = 0.5;   // rounded to the nearest half-second
+const AUTO_WAIT_CAP_S = 5;     // long pauses (e.g. stepping away) cap here
+
 function chipsVisible() {
   return $id('frame-target').style.display !== 'none';
 }
 
-function record(line) {
-  if (!recording) return;
+function appendScriptLine(line) {
   const ta = $id('script');
   ta.value = ta.value ? ta.value + '\n' + line : line;
   ta.scrollTop = ta.scrollHeight;
+}
+
+function record(line) {
+  if (!recording) return;
+  const now = Date.now();
+  if (lastRecordTs !== null) {
+    const gapS = (now - lastRecordTs) / 1000;
+    if (gapS > AUTO_WAIT_GAP_S) {
+      const rounded = Math.min(AUTO_WAIT_CAP_S, Math.round(gapS / AUTO_WAIT_ROUND) * AUTO_WAIT_ROUND);
+      appendScriptLine(`[wait ${rounded}]`);
+    }
+  }
+  lastRecordTs = now;
+  appendScriptLine(line);
 }
 
 async function post(url, body) {
@@ -2399,7 +2538,7 @@ for (const btn of document.querySelectorAll('[data-transition-name]')) {
 
 async function loadAssets() {
   try {
-    const { backgrounds, music, sfx } = await (await fetch('/api/assets')).json();
+    const { backgrounds, props, music, sfx } = await (await fetch('/api/assets')).json();
     const sel = $id('scene-bg');
     if (!backgrounds || !backgrounds.length) { sel.style.display = 'none'; }
     for (const id of backgrounds || []) {
@@ -2407,6 +2546,8 @@ async function loadAssets() {
       o.value = o.textContent = id;
       sel.appendChild(o);
     }
+
+    buildCastPropsControls(props || []);
 
     const musicSection = $id('music-section');
     if ((!music || !music.length) && (!sfx || !sfx.length)) { musicSection.style.display = 'none'; return; }
@@ -2431,6 +2572,95 @@ async function loadAssets() {
       sfxBox.appendChild(b);
     }
   } catch { /* asset list is a nicety */ }
+}
+
+// ------------------------------------------------------------ cast & props
+//
+// Mirrors dbbasic parity: the whole section stays hidden when there are no
+// props to place/wear (an asset pack with no props leaves nothing useful to
+// do here beyond placing a bare character, which isn't worth the UI). The
+// "characters" optgroup reuses the boot-time character list (see init());
+// the "props" optgroup and the Wear select are both the props id list from
+// /api/assets, which loadAssets() also uses for the Music section.
+
+function buildCastPropsControls(props) {
+  const section = $id('cast-section');
+  if (!props.length) { section.style.display = 'none'; return; }
+  section.style.display = '';
+
+  const placeSel = $id('place-what');
+  placeSel.innerHTML = '';
+  const charGroup = document.createElement('optgroup');
+  charGroup.label = 'characters';
+  for (const name of allCharacters) {
+    const o = document.createElement('option');
+    o.value = o.textContent = name;
+    charGroup.appendChild(o);
+  }
+  placeSel.appendChild(charGroup);
+  const propGroup = document.createElement('optgroup');
+  propGroup.label = 'props';
+  for (const id of props) {
+    const o = document.createElement('option');
+    o.value = o.textContent = id;
+    propGroup.appendChild(o);
+  }
+  placeSel.appendChild(propGroup);
+
+  const wearSel = $id('wear-what');
+  wearSel.innerHTML = '';
+  for (const id of props) {
+    const o = document.createElement('option');
+    o.value = o.textContent = id;
+    wearSel.appendChild(o);
+  }
+}
+
+$id('place-btn').onclick = () => {
+  const what = $id('place-what').value;
+  if (!what) return;
+  const x = Math.min(99, Math.max(1, parseInt($id('place-x').value, 10) || 50));
+  const isCharacter = allCharacters.includes(what);
+  const defaultScale = isCharacter ? 1 : 0.4; // matches Stage.placeActor's own default
+  post('/api/cue', { type: 'place', id: what, what, x, scale: defaultScale, frame: targetFrame });
+  // this row never offers a non-default scale, so the scale: key is always omitted
+  record(chipsVisible()
+    ? `[${targetFrame} place ${what} at ${x}]`
+    : `[place ${what} at ${x}]`);
+};
+
+$id('wear-btn').onclick = () => {
+  const prop = $id('wear-what').value;
+  if (!prop) return;
+  post('/api/cue', { type: 'wear', target: targetFrame, prop });
+  record(`[wear ${targetFrame} ${prop}]`);
+};
+
+$id('unwear-btn').onclick = () => {
+  post('/api/cue', { type: 'unwear', target: targetFrame });
+  record(`[unwear ${targetFrame}]`);
+};
+
+// Placed-actor chips: every actor currently placed across every frame,
+// rebuilt whenever a cue could have changed that set (see handleCue). Kept
+// hidden when empty, same convention as #frame-target.
+function syncActorChips() {
+  const row = $id('actor-chips');
+  const ids = [];
+  for (const f of stage.frames.values()) for (const id of f.actors.keys()) ids.push(id);
+  row.innerHTML = '';
+  if (!ids.length) { row.style.display = 'none'; return; }
+  row.style.display = '';
+  for (const id of ids) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = `✕ ${id}`;
+    b.onclick = () => {
+      post('/api/cue', { type: 'remove', id });
+      record(`[remove ${id}]`);
+    };
+    row.appendChild(b);
+  }
 }
 
 $id('music-select').addEventListener('change', (e) => {
@@ -2479,9 +2709,16 @@ $id('stop-script').onclick = () => post('/api/script/stop', {});
 
 $id('record-toggle').onclick = (e) => {
   recording = !recording;
+  if (recording) lastRecordTs = null; // fresh session: never auto-wait before its first line
   e.target.textContent = recording ? '● Recording' : '● Record';
   e.target.classList.toggle('rec-on', recording);
+  $id('wait-btn').disabled = !recording;
 };
+
+$id('wait-btn').onclick = () => record('[wait 1]');
+
+$id('help-toggle').onclick = () => $id('help-panel').classList.toggle('active');
+$id('help-close').onclick = () => $id('help-panel').classList.remove('active');
 
 // Applies a puppet's manifest-declared voice preference (engine + voice) to
 // the engine/voice selects, refreshing the voice list in between so the
@@ -2559,6 +2796,7 @@ async function selectTargetFrame(id) {
 (async function init() {
   syncFrameTargets(); // boots as one frame ('main'): chip row starts hidden
   const { characters } = await (await fetch('/api/characters')).json();
+  allCharacters = characters;
   const sel = $id('character');
   for (const c of characters) {
     const o = document.createElement('option');

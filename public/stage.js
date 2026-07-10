@@ -681,7 +681,7 @@ class Stage {
   place(cue) {
     const frameId = cue.frame || this.activeId;
     if (cue.frame) this.activeId = frameId;
-    this.placeActor(this.ensureFrame(frameId), cue);
+    return this.placeActor(this.ensureFrame(frameId), cue);
   }
 
   async placeActor(f, cue) {
@@ -1363,13 +1363,17 @@ function handleCue(cue) {
       syncFrameTargets();
       break;
     }
-    case 'frame-clear': stage.frameClear(cue); syncFrameTargets(); break;
-    case 'layout': stage.layout(cue); syncFrameTargets(); break;
+    case 'frame-clear': stage.frameClear(cue); syncFrameTargets(); syncActorChips(); break;
+    case 'layout': stage.layout(cue); syncFrameTargets(); syncActorChips(); break;
     case 'content': stage.content(cue); break;
     case 'content-clear': stage.contentClear(cue); break;
     case 'scene': stage.scene(cue); break;
-    case 'place': stage.place(cue); break;
-    case 'remove': stage.removeActor(cue); break;
+    // place resolves whether `what` is a character or a prop asynchronously
+    // (see Stage.placeActor), so the actor isn't in f.actors until that
+    // settles — sync the chip row off the returned promise rather than
+    // immediately, or a fast click would render the row one place behind.
+    case 'place': stage.place(cue).then(syncActorChips); break;
+    case 'remove': stage.removeActor(cue); syncActorChips(); break;
     case 'move': { const a = stage.resolveActor(cue); if (a) stage.moveActor(a, cue.x); break; }
     case 'scale': { const a = stage.resolveActor(cue); if (a) stage.scaleActor(a, cue.value); break; }
     case 'spin': { const a = stage.resolveActor(cue); if (a) stage.spinActor(a); break; }
@@ -1401,10 +1405,11 @@ function handleCue(cue) {
     case 'script-start':
       stage.clearAll();
       prompterStart(cue.lines);
+      syncActorChips();
       break;
     case 'script-line': prompterHighlight(cue.index); break;
     case 'script-end': prompterEnd(); break;
-    case 'clear': stage.clearAll(); break;
+    case 'clear': stage.clearAll(); syncActorChips(); break;
     case 'error': toast(cue.message); break;
   }
 }
@@ -1499,6 +1504,11 @@ function toast(msg) {
 
 let targetFrame = 'main';
 
+// Character folder names, fetched once at boot; reused by the Cast & Props
+// panel to tell "characters" from "props" in the [place] optgroups without
+// re-probing each asset the way Stage.probeCharacter does per placement.
+let allCharacters = [];
+
 // -------------------------------------------------------------- record mode
 //
 // When active, every PANEL-initiated action (not incoming SSE cues, and
@@ -1510,15 +1520,38 @@ let targetFrame = 'main';
 
 let recording = false;
 
+// Auto-timing: while recording, a gap of more than 1.5s between one
+// recorded line and the next gets a synthetic `[wait <gap>]` inserted ahead
+// of it, so a hand-driven take reproduces roughly the same pacing when
+// replayed. `lastRecordTs` is null right after recording starts (and after
+// each toggle-on) so nothing is ever inserted before a session's first line.
+let lastRecordTs = null;
+const AUTO_WAIT_GAP_S = 1.5;   // gaps shorter than this aren't worth a cue
+const AUTO_WAIT_ROUND = 0.5;   // rounded to the nearest half-second
+const AUTO_WAIT_CAP_S = 5;     // long pauses (e.g. stepping away) cap here
+
 function chipsVisible() {
   return $id('frame-target').style.display !== 'none';
 }
 
-function record(line) {
-  if (!recording) return;
+function appendScriptLine(line) {
   const ta = $id('script');
   ta.value = ta.value ? ta.value + '\n' + line : line;
   ta.scrollTop = ta.scrollHeight;
+}
+
+function record(line) {
+  if (!recording) return;
+  const now = Date.now();
+  if (lastRecordTs !== null) {
+    const gapS = (now - lastRecordTs) / 1000;
+    if (gapS > AUTO_WAIT_GAP_S) {
+      const rounded = Math.min(AUTO_WAIT_CAP_S, Math.round(gapS / AUTO_WAIT_ROUND) * AUTO_WAIT_ROUND);
+      appendScriptLine(`[wait ${rounded}]`);
+    }
+  }
+  lastRecordTs = now;
+  appendScriptLine(line);
 }
 
 async function post(url, body) {
@@ -1665,7 +1698,7 @@ for (const btn of document.querySelectorAll('[data-transition-name]')) {
 
 async function loadAssets() {
   try {
-    const { backgrounds, music, sfx } = await (await fetch('/api/assets')).json();
+    const { backgrounds, props, music, sfx } = await (await fetch('/api/assets')).json();
     const sel = $id('scene-bg');
     if (!backgrounds || !backgrounds.length) { sel.style.display = 'none'; }
     for (const id of backgrounds || []) {
@@ -1673,6 +1706,8 @@ async function loadAssets() {
       o.value = o.textContent = id;
       sel.appendChild(o);
     }
+
+    buildCastPropsControls(props || []);
 
     const musicSection = $id('music-section');
     if ((!music || !music.length) && (!sfx || !sfx.length)) { musicSection.style.display = 'none'; return; }
@@ -1697,6 +1732,95 @@ async function loadAssets() {
       sfxBox.appendChild(b);
     }
   } catch { /* asset list is a nicety */ }
+}
+
+// ------------------------------------------------------------ cast & props
+//
+// Mirrors dbbasic parity: the whole section stays hidden when there are no
+// props to place/wear (an asset pack with no props leaves nothing useful to
+// do here beyond placing a bare character, which isn't worth the UI). The
+// "characters" optgroup reuses the boot-time character list (see init());
+// the "props" optgroup and the Wear select are both the props id list from
+// /api/assets, which loadAssets() also uses for the Music section.
+
+function buildCastPropsControls(props) {
+  const section = $id('cast-section');
+  if (!props.length) { section.style.display = 'none'; return; }
+  section.style.display = '';
+
+  const placeSel = $id('place-what');
+  placeSel.innerHTML = '';
+  const charGroup = document.createElement('optgroup');
+  charGroup.label = 'characters';
+  for (const name of allCharacters) {
+    const o = document.createElement('option');
+    o.value = o.textContent = name;
+    charGroup.appendChild(o);
+  }
+  placeSel.appendChild(charGroup);
+  const propGroup = document.createElement('optgroup');
+  propGroup.label = 'props';
+  for (const id of props) {
+    const o = document.createElement('option');
+    o.value = o.textContent = id;
+    propGroup.appendChild(o);
+  }
+  placeSel.appendChild(propGroup);
+
+  const wearSel = $id('wear-what');
+  wearSel.innerHTML = '';
+  for (const id of props) {
+    const o = document.createElement('option');
+    o.value = o.textContent = id;
+    wearSel.appendChild(o);
+  }
+}
+
+$id('place-btn').onclick = () => {
+  const what = $id('place-what').value;
+  if (!what) return;
+  const x = Math.min(99, Math.max(1, parseInt($id('place-x').value, 10) || 50));
+  const isCharacter = allCharacters.includes(what);
+  const defaultScale = isCharacter ? 1 : 0.4; // matches Stage.placeActor's own default
+  post('/api/cue', { type: 'place', id: what, what, x, scale: defaultScale, frame: targetFrame });
+  // this row never offers a non-default scale, so the scale: key is always omitted
+  record(chipsVisible()
+    ? `[${targetFrame} place ${what} at ${x}]`
+    : `[place ${what} at ${x}]`);
+};
+
+$id('wear-btn').onclick = () => {
+  const prop = $id('wear-what').value;
+  if (!prop) return;
+  post('/api/cue', { type: 'wear', target: targetFrame, prop });
+  record(`[wear ${targetFrame} ${prop}]`);
+};
+
+$id('unwear-btn').onclick = () => {
+  post('/api/cue', { type: 'unwear', target: targetFrame });
+  record(`[unwear ${targetFrame}]`);
+};
+
+// Placed-actor chips: every actor currently placed across every frame,
+// rebuilt whenever a cue could have changed that set (see handleCue). Kept
+// hidden when empty, same convention as #frame-target.
+function syncActorChips() {
+  const row = $id('actor-chips');
+  const ids = [];
+  for (const f of stage.frames.values()) for (const id of f.actors.keys()) ids.push(id);
+  row.innerHTML = '';
+  if (!ids.length) { row.style.display = 'none'; return; }
+  row.style.display = '';
+  for (const id of ids) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = `✕ ${id}`;
+    b.onclick = () => {
+      post('/api/cue', { type: 'remove', id });
+      record(`[remove ${id}]`);
+    };
+    row.appendChild(b);
+  }
 }
 
 $id('music-select').addEventListener('change', (e) => {
@@ -1745,9 +1869,16 @@ $id('stop-script').onclick = () => post('/api/script/stop', {});
 
 $id('record-toggle').onclick = (e) => {
   recording = !recording;
+  if (recording) lastRecordTs = null; // fresh session: never auto-wait before its first line
   e.target.textContent = recording ? '● Recording' : '● Record';
   e.target.classList.toggle('rec-on', recording);
+  $id('wait-btn').disabled = !recording;
 };
+
+$id('wait-btn').onclick = () => record('[wait 1]');
+
+$id('help-toggle').onclick = () => $id('help-panel').classList.toggle('active');
+$id('help-close').onclick = () => $id('help-panel').classList.remove('active');
 
 // Applies a puppet's manifest-declared voice preference (engine + voice) to
 // the engine/voice selects, refreshing the voice list in between so the
@@ -1825,6 +1956,7 @@ async function selectTargetFrame(id) {
 (async function init() {
   syncFrameTargets(); // boots as one frame ('main'): chip row starts hidden
   const { characters } = await (await fetch('/api/characters')).json();
+  allCharacters = characters;
   const sel = $id('character');
   for (const c of characters) {
     const o = document.createElement('option');
