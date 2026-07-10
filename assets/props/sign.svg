@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- post -->
+  <rect x="46" y="40" width="8" height="56" fill="#7a5230"/>
+  <!-- board -->
+  <rect x="14" y="16" width="72" height="30" rx="4" fill="#c9a066"/>
+  <rect x="14" y="16" width="72" height="30" rx="4" fill="none" stroke="#8a5a2e" stroke-width="3"/>
+</svg>

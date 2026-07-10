@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 100">
+  <!-- body -->
+  <rect x="6" y="4" width="48" height="92" rx="8" fill="#2b2f38"/>
+  <!-- screen -->
+  <rect x="11" y="12" width="38" height="76" rx="3" fill="#14171c"/>
+  <!-- reflection -->
+  <path d="M16,18 L24,18 L14,60 L8,60 Z" fill="#3f4550"/>
+  <!-- home indicator -->
+  <rect x="22" y="90" width="16" height="3" rx="1.5" fill="#5a6270"/>
+</svg>

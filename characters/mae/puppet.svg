@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 300">
+  <g id="puppet" style="transform-box:fill-box;transform-origin:50% 100%">
+
+    <g id="legs">
+      <rect id="leg-left" x="82" y="208" width="16" height="34" rx="7" fill="#f6dfae" stroke="#1a1a1a" stroke-width="2"/>
+      <rect id="leg-right" x="102" y="208" width="16" height="34" rx="7" fill="#f6dfae" stroke="#1a1a1a" stroke-width="2"/>
+      <ellipse cx="90" cy="246" rx="17" ry="7" fill="#1a1a1a"/>
+      <ellipse cx="110" cy="246" rx="17" ry="7" fill="#1a1a1a"/>
+      <path d="M80,241 Q90,248 100,241" stroke="#c65a72" stroke-width="2.5" fill="none" opacity="0.8"/>
+      <path d="M100,241 Q110,248 120,241" stroke="#c65a72" stroke-width="2.5" fill="none" opacity="0.8"/>
+    </g>
+
+    <g id="arm-left" style="transform-box:fill-box;transform-origin:75% 8%">
+      <path d="M70,152 Q46,172 50,198" stroke="#1a1a1a" stroke-width="13" fill="none" stroke-linecap="round"/>
+      <circle cx="50" cy="200" r="10.5" fill="#ffffff" stroke="#1a1a1a" stroke-width="3"/>
+      <path d="M60,146 Q76,142 81,155 Q72,165 58,159 Q56,151 60,146 Z" fill="#f6dfae" stroke="#1a1a1a" stroke-width="2.5"/>
+    </g>
+    <g id="arm-right" style="transform-box:fill-box;transform-origin:25% 8%">
+      <path d="M130,152 Q154,172 150,198" stroke="#1a1a1a" stroke-width="13" fill="none" stroke-linecap="round"/>
+      <circle cx="150" cy="200" r="10.5" fill="#ffffff" stroke="#1a1a1a" stroke-width="3"/>
+      <path d="M140,146 Q124,142 119,155 Q128,165 142,159 Q144,151 140,146 Z" fill="#f6dfae" stroke="#1a1a1a" stroke-width="2.5"/>
+    </g>
+
+    <g id="body">
+      <path d="M74,148 Q100,135 126,148 L118,172 Q140,190 148,210 Q100,225 52,210 Q60,190 82,172 Z" fill="#2f7a72" stroke="#1a1a1a" stroke-width="3"/>
+      <path d="M76,149 Q100,138 124,149 L116,173 Q100,180 84,173 Z" fill="#f6dfae" stroke="#1a1a1a" stroke-width="2.5"/>
+      <path d="M83,173 Q100,180 117,173" stroke="#c65a72" stroke-width="4" fill="none" stroke-linecap="round"/>
+      <circle cx="100" cy="156" r="2.6" fill="#1a1a1a"/>
+      <circle cx="100" cy="164" r="2.6" fill="#1a1a1a"/>
+    </g>
+
+    <g id="head" style="transform-box:fill-box;transform-origin:50% 88%">
+      <circle cx="100" cy="95" r="58" fill="#f6dfae" stroke="#1a1a1a" stroke-width="4"/>
+
+      <path d="M48,126 C42,116 40,102 40,88 C40,54 66,30 100,30
+               C134,30 160,54 160,88 C160,102 158,116 152,126
+               C146,118 140,114 133,111 C138,100 138,88 133,78
+               C126,63 114,55 100,55 C86,55 74,63 67,78
+               C62,88 62,100 67,111 C60,114 54,118 48,126 Z"
+            fill="#1a1a1a"/>
+      <path d="M48,84 Q100,68 152,84" stroke="#c65a72" stroke-width="4.5" fill="none" stroke-linecap="round"/>
+      <circle cx="150" cy="84" r="4.5" fill="#c65a72" stroke="#1a1a1a" stroke-width="1"/>
+
+      <ellipse id="cheek-left" cx="66" cy="112" rx="8" ry="5" fill="#e0777a" opacity="0.4"/>
+      <ellipse id="cheek-right" cx="134" cy="112" rx="8" ry="5" fill="#e0777a" opacity="0.4"/>
+
+      <g id="brows">
+        <path id="brow-left" style="transform-box:fill-box;transform-origin:50% 50%"
+              d="M68,62 Q80,52 92,60" stroke="#1a1a1a" stroke-width="3.6" fill="none" stroke-linecap="round"/>
+        <path id="brow-right" style="transform-box:fill-box;transform-origin:50% 50%"
+              d="M108,60 Q120,52 132,62" stroke="#1a1a1a" stroke-width="3.6" fill="none" stroke-linecap="round"/>
+      </g>
+
+      <!-- Pie-cut eyes: white sclera behind a black wedge-cut pupil, classic rubber-hose look -->
+      <g id="eyes" style="transform-box:fill-box;transform-origin:50% 50%">
+        <g id="eye-left">
+          <ellipse cx="80" cy="92" rx="13" ry="15" fill="#ffffff" stroke="#1a1a1a" stroke-width="3"/>
+        </g>
+        <g id="eye-right">
+          <ellipse cx="120" cy="92" rx="13" ry="15" fill="#ffffff" stroke="#1a1a1a" stroke-width="3"/>
+        </g>
+        <path d="M92,84 L98,79" stroke="#1a1a1a" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <path d="M108,79 L114,84" stroke="#1a1a1a" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <g id="pupils">
+          <circle cx="79" cy="93" r="7.5" fill="#1a1a1a"/>
+          <circle cx="119" cy="93" r="7.5" fill="#1a1a1a"/>
+          <circle cx="81.4" cy="90.4" r="2.2" fill="#ffffff"/>
+          <circle cx="121.4" cy="90.4" r="2.2" fill="#ffffff"/>
+        </g>
+      </g>
+
+      <g id="nose">
+        <path d="M96,106 Q100,111 104,106 Q100,109.5 96,106 Z" fill="#1a1a1a"/>
+      </g>
+
+      <!-- Nine viseme mouth shapes, flat rubber-hose style: exactly one visible at a time -->
+      <g id="mouths">
+        <g id="mouth-X">
+          <path d="M86,127 Q100,132 114,127" stroke="#1a1a1a" stroke-width="4" fill="none" stroke-linecap="round"/>
+        </g>
+        <g id="mouth-A">
+          <path d="M86,129 L114,129" stroke="#1a1a1a" stroke-width="4.5" fill="none" stroke-linecap="round"/>
+        </g>
+        <g id="mouth-B">
+          <path d="M87,124 Q100,120.5 113,124 Q113,134 100,135 Q87,134 87,124 Z" fill="#1a1a1a"/>
+          <rect x="90" y="124" width="20" height="4.5" rx="2" fill="#ffffff"/>
+        </g>
+        <g id="mouth-C">
+          <ellipse cx="100" cy="129" rx="12" ry="8" fill="#1a1a1a"/>
+        </g>
+        <g id="mouth-D">
+          <ellipse cx="100" cy="130" rx="16" ry="12" fill="#1a1a1a"/>
+          <ellipse cx="100" cy="137" rx="8" ry="4.5" fill="#c65a72"/>
+        </g>
+        <g id="mouth-E">
+          <circle cx="100" cy="129" r="7.5" fill="#1a1a1a"/>
+        </g>
+        <g id="mouth-F">
+          <ellipse cx="100" cy="129" rx="5" ry="7" fill="#1a1a1a" stroke="#2f7a72" stroke-width="3"/>
+        </g>
+        <g id="mouth-G">
+          <rect x="90" y="124" width="20" height="6" rx="2.4" fill="#ffffff" stroke="#1a1a1a" stroke-width="1.5"/>
+          <path d="M87,133 Q100,137 113,133" stroke="#1a1a1a" stroke-width="4" fill="none" stroke-linecap="round"/>
+        </g>
+        <g id="mouth-H">
+          <ellipse cx="100" cy="129" rx="11" ry="9" fill="#1a1a1a"/>
+          <ellipse cx="100" cy="123.5" rx="6" ry="3.2" fill="#c65a72"/>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

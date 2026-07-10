@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180">
+  <defs>
+    <linearGradient id="street-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#9dbdcd"/>
+      <stop offset="100%" stop-color="#c9dbe0"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="320" height="150" fill="url(#street-sky)"/>
+  <rect x="-10" y="70" width="70" height="82" fill="#c98f7c"/>
+  <rect x="55" y="40" width="90" height="112" fill="#d8b96a"/>
+  <rect x="150" y="58" width="80" height="94" fill="#6f9c95"/>
+  <rect x="235" y="48" width="95" height="104" fill="#a99c8d"/>
+  <rect x="0" y="82" width="46" height="14" fill="#9c6553" opacity="0.8"/>
+  <rect x="68" y="56" width="16" height="20" fill="#b89452" opacity="0.8"/>
+  <rect x="100" y="56" width="16" height="20" fill="#b89452" opacity="0.8"/>
+  <rect x="68" y="86" width="16" height="20" fill="#b89452" opacity="0.8"/>
+  <rect x="100" y="86" width="16" height="20" fill="#b89452" opacity="0.8"/>
+  <rect x="168" y="74" width="16" height="20" fill="#588a83" opacity="0.8"/>
+  <rect x="196" y="74" width="16" height="20" fill="#588a83" opacity="0.8"/>
+  <rect x="252" y="64" width="16" height="20" fill="#8f8274" opacity="0.8"/>
+  <rect x="284" y="64" width="16" height="20" fill="#8f8274" opacity="0.8"/>
+  <rect x="0" y="150" width="320" height="30" fill="#cfc9bd"/>
+  <rect x="0" y="150" width="320" height="4" fill="#a39c8d"/>
+</svg>

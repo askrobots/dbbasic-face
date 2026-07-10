@@ -888,6 +888,71 @@ $id('walk').addEventListener('change', (e) => {
   post('/api/cue', { type: 'walk', x: parseInt(e.target.value, 10), frame: 'main' });
 });
 
+// -------------------------------------------------------------- scene
+
+for (const btn of document.querySelectorAll('#layout-buttons button')) {
+  btn.onclick = () => post('/api/cue', { type: 'layout', preset: btn.dataset.preset });
+}
+
+$id('scene-bg').addEventListener('change', (e) => {
+  const bg = e.target.value;
+  if (!bg) return;
+  post('/api/cue', { type: 'scene', bg }); // targets the active frame server-side
+  e.target.value = ''; // picker, not a state display
+});
+
+let captionsOn = false;
+$id('captions-toggle').onclick = (e) => {
+  captionsOn = !captionsOn;
+  post('/api/cue', { type: 'captions', on: captionsOn });
+  e.target.textContent = captionsOn ? 'CC on' : 'CC off';
+  e.target.classList.toggle('on', captionsOn);
+};
+
+for (const btn of document.querySelectorAll('[data-transition-name]')) {
+  btn.onclick = () => post('/api/cue', {
+    type: 'transition', name: btn.dataset.transitionName, dir: btn.dataset.transitionDir,
+  });
+}
+
+async function loadAssets() {
+  try {
+    const { backgrounds } = await (await fetch('/api/assets')).json();
+    const sel = $id('scene-bg');
+    if (!backgrounds || !backgrounds.length) { sel.style.display = 'none'; return; }
+    for (const id of backgrounds) {
+      const o = document.createElement('option');
+      o.value = o.textContent = id;
+      sel.appendChild(o);
+    }
+  } catch { /* asset list is a nicety */ }
+}
+
+// ---------------------------------------------------------------- examples
+
+async function loadExamples() {
+  try {
+    const { examples } = await (await fetch('/api/examples')).json();
+    const row = $id('example-row');
+    if (!examples || !examples.length) { row.style.display = 'none'; return; }
+    const sel = $id('example');
+    for (const name of examples) {
+      const o = document.createElement('option');
+      o.value = o.textContent = name;
+      sel.appendChild(o);
+    }
+  } catch { /* example list is a nicety */ }
+}
+
+$id('load-example').onclick = async () => {
+  const name = $id('example').value;
+  if (!name) return;
+  try {
+    const { script } = await (await fetch(`/api/examples/${encodeURIComponent(name)}`)).json();
+    $id('script').value = script;
+  } catch { toast('could not load example'); }
+};
+
 $id('run-script').onclick = () => {
   const p = mainPuppet();
   post('/api/script', { script: $id('script').value, mainCharacter: p && p.characterName });
@@ -928,15 +993,19 @@ $id('character').addEventListener('change', (e) => {
   }
   await loadCharacter(characters[0], 'main');
   if (!mainPuppet().manifest.voice) loadVoices();
+  loadAssets();
+  loadExamples();
   $id('script').value = [
-    '# Screenplay: [direction] lines and spoken lines',
-    '[enter from left]',
-    'Hello! I\'m Pip, your puppet.',
-    '(wave) Nice to meet you!',
-    '[walk to 75]',
-    '[emote surprised]',
-    'Whoa, the view is different over here.',
-    '[emote neutral] [walk to 40]',
-    '(bow) That\'s my act. Thanks for watching!',
+    '# Try an example from the picker above, or run this:',
+    '[captions on]',
+    '[fade in 800]',
+    'Hello! Welcome to the puppet stage.',
+    '(wave) Every line here is a cue.',
+    '[view face]',
+    'The camera can come in close…',
+    '[view body] [walk to 65]',
+    '…and I can move around the stage.',
+    '(bow) Load an example above to see a real show.',
+    '[iris out 1000]',
   ].join('\n');
 })();

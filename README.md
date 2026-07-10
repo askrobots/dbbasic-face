@@ -195,9 +195,13 @@ Where we left off.
 [iris out 1200]
 ```
 
-A starter asset pack ships in `assets/`: backgrounds `desk`, `sky`, and
-`room`, a few props, and the `lower-third` overlay template, plus a second
-character, `bo`, in a vintage rubber-hose style. See
+An asset library ships in `assets/`: ten backgrounds (`desk`, `sky`, `room`,
+`hilltop`, `street`, `newsroom`, `forest`, `night`, `kitchen`, `curtain`),
+eleven props (including a `golden-box`), and five overlay templates
+(`lower-third`, `title-card`, `breaking`, `ticker`, `balloon`). Five
+characters ship in `characters/`: `pip` (cartoon minimal), `ava` and `gus`
+(flat semi-realistic), `bo` and `mae` (vintage rubber-hose) — each with its
+own voice. See
 [docs/authoring-assets.md](docs/authoring-assets.md) for adding your own, and
 [docs/design/frames-and-scenes.md](docs/design/frames-and-scenes.md) for the
 full cue schema and screenplay grammar.

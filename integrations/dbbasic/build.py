@@ -32,6 +32,10 @@ for manifest_path in sorted((ROOT / "characters").glob("*/manifest.json")):
     svg = (manifest_path.parent / manifest["svg"]).read_text()
     characters[manifest_path.parent.name] = {"manifest": manifest, "svg": svg}
 
+examples = {}
+for script_path in sorted((ROOT / "examples").glob("*.txt")):
+    examples[script_path.stem] = script_path.read_text()
+
 html = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -43,6 +47,7 @@ html = f"""<!doctype html>
 <body>
 {body}
 <script>window.PUPPET_CHARACTERS = {json.dumps(characters)};</script>
+<script>window.PUPPET_EXAMPLES = {json.dumps(examples)};</script>
 <script>
 {shim_js}
 </script>
@@ -70,4 +75,5 @@ def GET(request):
 
 OUT.parent.mkdir(parents=True, exist_ok=True)
 OUT.write_text(stage_py)
-print(f"wrote {OUT} ({len(stage_py)//1024} KB, characters: {', '.join(characters)})")
+print(f"wrote {OUT} ({len(stage_py)//1024} KB, characters: {', '.join(characters)}, "
+      f"examples: {', '.join(examples)})")

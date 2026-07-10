@@ -111,6 +111,9 @@
   .row > * { flex: 1; min-width: 0; }
   #actions { display: flex; flex-wrap: wrap; gap: 6px; }
   #actions button { flex: 0 0 auto; font-size: 12px; padding: 6px 10px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips button { flex: 0 0 auto; font-size: 12px; padding: 6px 10px; }
+  .chips button.on { background: #4c6ef5; border-color: #4c6ef5; }
   button.primary { background: #4c6ef5; border-color: #4c6ef5; }
   button.primary:hover { background: #5c7cfa; }
   input[type=range] { width: 100%; }
@@ -161,12 +164,37 @@
     <section>
       <h2>Direct</h2>
       <div id="actions"></div>
+    </section>
+
+    <section>
+      <h2>Scene</h2>
+      <div class="chips" id="layout-buttons">
+        <button type="button" data-preset="single">single</button>
+        <button type="button" data-preset="split">split</button>
+        <button type="button" data-preset="thirds">thirds</button>
+        <button type="button" data-preset="pip-tr">pip</button>
+      </div>
+      <select id="scene-bg"><option value="">background…</option></select>
+      <div class="chips">
+        <button type="button" id="captions-toggle">CC off</button>
+        <button type="button" data-transition-name="fade" data-transition-dir="in">fade in</button>
+        <button type="button" data-transition-name="fade" data-transition-dir="out">fade out</button>
+        <button type="button" data-transition-name="iris" data-transition-dir="in">iris in</button>
+        <button type="button" data-transition-name="iris" data-transition-dir="out">iris out</button>
+      </div>
+    </section>
+
+    <section>
       <label>walk to position</label>
       <input type="range" id="walk" min="5" max="95" value="50">
     </section>
 
     <section>
       <h2>Screenplay</h2>
+      <div class="row" id="example-row">
+        <select id="example"><option value="">example…</option></select>
+        <button type="button" id="load-example" style="flex:0 0 auto">Load</button>
+      </div>
       <textarea id="script" spellcheck="false"></textarea>
       <div class="row">
         <button class="primary" id="run-script">▶ Run</button>

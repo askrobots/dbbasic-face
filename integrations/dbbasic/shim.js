@@ -13,6 +13,7 @@
   const SPEAK_URL = '/objects/puppet_speak';
   const POLL_MS = 350;
   const CHARACTERS = window.PUPPET_CHARACTERS || {};
+  const EXAMPLES = window.PUPPET_EXAMPLES || {};
   const realFetch = window.fetch.bind(window);
 
   const jsonResponse = (obj, status = 200) =>
@@ -361,6 +362,20 @@
       scriptToken++;
       postCue({ type: 'script-end' });
       return jsonResponse({ ok: true });
+    }
+    if (u === '/api/examples') {
+      return jsonResponse({ examples: Object.keys(EXAMPLES).sort() });
+    }
+    if (u.startsWith('/api/examples/')) {
+      const name = decodeURIComponent(u.slice('/api/examples/'.length));
+      const script = EXAMPLES[name];
+      if (script === undefined) return jsonResponse({ error: 'example not found' }, 404);
+      return jsonResponse({ name, script });
+    }
+    if (u === '/api/assets') {
+      // the package page has no asset serving; the UI hides pickers that get
+      // empty lists back.
+      return jsonResponse({ backgrounds: [], props: [], overlays: [] });
     }
     return realFetch(url, opts);
   };

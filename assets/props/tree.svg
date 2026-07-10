@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- trunk -->
+  <rect x="44" y="70" width="12" height="26" rx="2" fill="#7a5230"/>
+  <!-- canopy blobs -->
+  <circle cx="38" cy="52" r="20" fill="#4c8c5b"/>
+  <circle cx="62" cy="52" r="20" fill="#5da56d"/>
+  <circle cx="50" cy="34" r="22" fill="#3c7448"/>
+</svg>

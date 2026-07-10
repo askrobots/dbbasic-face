@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- box base -->
+  <rect x="18" y="52" width="64" height="32" rx="4" fill="#8a5a2e"/>
+  <!-- lid -->
+  <path d="M16,52 Q16,32 50,32 Q84,32 84,52 Z" fill="#c9962c"/>
+  <!-- lid rim highlight -->
+  <path d="M16,52 Q16,36 50,36 Q84,36 84,52 Z" fill="none" stroke="#e8c265" stroke-width="3"/>
+  <!-- center strap -->
+  <rect x="44" y="32" width="12" height="52" fill="#6b4423"/>
+  <!-- lock -->
+  <rect x="42" y="58" width="16" height="16" rx="3" fill="#e8c265" stroke="#6b4423" stroke-width="2"/>
+  <circle cx="50" cy="66" r="3" fill="#6b4423"/>
+  <!-- shine mark -->
+  <path d="M68,40 L70,46 L76,48 L70,50 L68,56 L66,50 L60,48 L66,46 Z" fill="#fff2c9"/>
+</svg>

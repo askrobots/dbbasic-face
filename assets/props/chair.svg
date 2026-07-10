@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- back -->
+  <rect x="28" y="10" width="44" height="10" rx="3" fill="#8a5a3c"/>
+  <rect x="30" y="20" width="6" height="34" fill="#8a5a3c"/>
+  <rect x="64" y="20" width="6" height="34" fill="#8a5a3c"/>
+  <!-- seat -->
+  <rect x="24" y="54" width="52" height="10" rx="3" fill="#a8724c"/>
+  <!-- legs -->
+  <rect x="28" y="64" width="7" height="28" fill="#6b4423"/>
+  <rect x="65" y="64" width="7" height="28" fill="#6b4423"/>
+</svg>

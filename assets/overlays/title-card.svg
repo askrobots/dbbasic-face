@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180">
+  <!-- vignette card panel (margin kept so it reads as a card, not full-bleed) -->
+  <rect x="20" y="20" width="280" height="140" rx="3" fill="#0a0906" opacity="0.93"/>
+
+  <!-- ornate double border -->
+  <rect x="24" y="24" width="272" height="132" fill="none" stroke="#c9a86a" stroke-width="1.5"/>
+  <rect x="28" y="28" width="264" height="124" fill="none" stroke="#c9a86a" stroke-width="0.5"/>
+
+  <!-- corner flourishes -->
+  <circle cx="28" cy="28" r="2.5" fill="#c9a86a"/>
+  <circle cx="292" cy="28" r="2.5" fill="#c9a86a"/>
+  <circle cx="28" cy="152" r="2.5" fill="#c9a86a"/>
+  <circle cx="292" cy="152" r="2.5" fill="#c9a86a"/>
+
+  <!-- rule under title -->
+  <line x1="110" y1="98" x2="210" y2="98" stroke="#c9a86a" stroke-width="1"/>
+
+  <text data-slot="title" x="160" y="88" text-anchor="middle"
+        font-family="Georgia, 'Times New Roman', serif" font-size="24" font-weight="700"
+        fill="#f2e6c9" letter-spacing="1">Title</text>
+
+  <text data-slot="subtitle" x="160" y="120" text-anchor="middle"
+        font-family="Georgia, 'Times New Roman', serif" font-size="12" font-style="italic"
+        fill="#d9c9a3" letter-spacing="0.5">Subtitle</text>
+</svg>

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180">
+  <defs>
+    <linearGradient id="forest-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#b9d3c8"/>
+      <stop offset="100%" stop-color="#e2ecda"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="320" height="150" fill="url(#forest-sky)"/>
+  <polygon points="20,110 34,80 48,110" fill="#9bb896"/>
+  <polygon points="60,116 74,84 88,116" fill="#9bb896"/>
+  <polygon points="232,114 246,82 260,114" fill="#9bb896"/>
+  <polygon points="272,110 286,80 300,110" fill="#9bb896"/>
+  <polygon points="10,132 30,92 50,132" fill="#79a173"/>
+  <rect x="27" y="128" width="6" height="10" fill="#6c8a5f"/>
+  <polygon points="255,136 277,94 299,136" fill="#79a173"/>
+  <rect x="273" y="130" width="6" height="12" fill="#6c8a5f"/>
+  <polygon points="130,120 148,88 166,120" fill="#87ac82"/>
+  <polygon points="0,150 26,102 52,150" fill="#587a4d"/>
+  <rect x="35" y="144" width="8" height="14" fill="#4d6a44"/>
+  <polygon points="268,150 294,100 320,150" fill="#587a4d"/>
+  <rect x="303" y="144" width="8" height="14" fill="#4d6a44"/>
+  <rect x="0" y="150" width="320" height="30" fill="#6f8a54"/>
+  <rect x="0" y="150" width="320" height="5" fill="#5f7a48"/>
+</svg>

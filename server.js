@@ -24,6 +24,7 @@ const CACHE = path.join(ROOT, 'cache');
 const PUBLIC = path.join(ROOT, 'public');
 const CHARACTERS = path.join(ROOT, 'characters');
 const ASSETS = path.join(ROOT, 'assets');
+const EXAMPLES = path.join(ROOT, 'examples');
 const RHUBARB = findRhubarb();
 const PORT = process.env.PORT || 3123;
 
@@ -634,6 +635,47 @@ const server = http.createServer(async (req, res) => {
       const names = fs.readdirSync(CHARACTERS, { withFileTypes: true })
         .filter((d) => d.isDirectory()).map((d) => d.name);
       return json(res, 200, { characters: names });
+    }
+
+    // GET /api/examples → basenames (no .txt) of examples/*.txt, sorted.
+    if (p === '/api/examples') {
+      let names = [];
+      try {
+        names = fs.readdirSync(EXAMPLES)
+          .filter((f) => f.endsWith('.txt'))
+          .map((f) => f.slice(0, -'.txt'.length))
+          .sort();
+      } catch { /* no examples dir yet */ }
+      return json(res, 200, { examples: names });
+    }
+
+    // GET /api/examples/<name> → {name, script} of examples/<name>.txt.
+    if (p.startsWith('/api/examples/')) {
+      const rel = path.normalize(p.slice('/api/examples/'.length));
+      if (rel.startsWith('..')) { res.writeHead(403); return res.end(); }
+      const file = path.join(EXAMPLES, rel + '.txt');
+      if (!fs.existsSync(file)) return json(res, 404, { error: 'example not found' });
+      return json(res, 200, { name: rel, script: fs.readFileSync(file, 'utf8') });
+    }
+
+    // GET /api/assets → {backgrounds, props, overlays}: ids (filenames minus
+    // extension) available in assets/<kind>/, deduped across the extension set.
+    if (p === '/api/assets') {
+      const listKind = (kind) => {
+        let files = [];
+        try { files = fs.readdirSync(path.join(ASSETS, kind)); } catch { return []; }
+        const ids = new Set();
+        for (const f of files) {
+          const ext = path.extname(f);
+          if (ASSET_EXTS.includes(ext)) ids.add(f.slice(0, -ext.length));
+        }
+        return [...ids].sort();
+      };
+      return json(res, 200, {
+        backgrounds: listKind('backgrounds'),
+        props: listKind('props'),
+        overlays: listKind('overlays'),
+      });
     }
 
     // 1x1 gif served after a delay — lets headless screenshots wait for async boot

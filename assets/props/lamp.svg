@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- base -->
+  <ellipse cx="50" cy="92" rx="22" ry="6" fill="#2b2f38"/>
+  <!-- neck lower -->
+  <rect x="47" y="50" width="6" height="42" fill="#2b2f38"/>
+  <!-- angled arm -->
+  <path d="M50,50 L28,26" stroke="#2b2f38" stroke-width="7" stroke-linecap="round" fill="none"/>
+  <!-- angled head -->
+  <path d="M10,18 L40,14 L36,32 L14,34 Z" fill="#e8b84b"/>
+  <!-- bulb glow -->
+  <circle cx="16" cy="26" r="4" fill="#fff2c9"/>
+</svg>

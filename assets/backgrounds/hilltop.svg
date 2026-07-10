@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180">
+  <defs>
+    <linearGradient id="hilltop-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#6fa3ce"/>
+      <stop offset="55%" stop-color="#bcdcec"/>
+      <stop offset="100%" stop-color="#eef6f0"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="320" height="180" fill="url(#hilltop-sky)"/>
+  <polygon points="0,180 0,152 60,140 130,118 200,92 260,74 320,58 320,180" fill="#7fa563"/>
+  <polygon points="0,152 60,140 130,118 200,92 260,74 320,58 320,68 262,84 202,102 132,128 62,150 0,160" fill="#6c9152" opacity="0.65"/>
+  <path d="M148,180 C158,150 174,130 204,112 C224,100 234,90 244,78" fill="none" stroke="#e8ddb5" stroke-width="9" stroke-linecap="round" opacity="0.9"/>
+</svg>

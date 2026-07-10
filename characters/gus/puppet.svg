@@ -1,0 +1,158 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 560">
+  <defs>
+    <clipPath id="gus-eye-left"><path d="M78,64 Q88,55 98,63 Q88,73 78,64 Z"/></clipPath>
+    <clipPath id="gus-eye-right"><path d="M122,63 Q132,55 142,64 Q132,73 122,63 Z"/></clipPath>
+  </defs>
+  <g id="puppet" style="transform-box:fill-box;transform-origin:50% 100%">
+
+    <g id="legs">
+      <path d="M70,252 Q110,262 150,252 L152,304 Q110,314 68,304 Z" fill="#33363e"/>
+      <path id="leg-left" d="M76,302 C74,358 76,416 80,468 L80,528 L104,528 L102,468 C104,416 104,358 106,306 Z" fill="#41454c"/>
+      <path id="leg-right" d="M114,306 C116,358 116,416 118,468 L116,528 L140,528 L138,468 C142,416 146,358 144,302 Z" fill="#41454c"/>
+      <ellipse cx="92" cy="534" rx="17" ry="8" fill="#1a1a1a"/>
+      <ellipse cx="128" cy="534" rx="17" ry="8" fill="#1a1a1a"/>
+    </g>
+
+    <g id="arm-left" style="transform-box:fill-box;transform-origin:50% 5%">
+      <path d="M64,178 C57,208 60,248 67,286" stroke="#4a6b4f" stroke-width="15" fill="none" stroke-linecap="round"/>
+      <ellipse cx="88" cy="222" rx="6" ry="9" fill="#3d5a41" transform="rotate(12 88 222)"/>
+      <ellipse cx="68" cy="292" rx="6" ry="8.5" fill="#d9a878"/>
+      <path d="M70,150 C58,154 51,166 54,184 C61,189 70,187 75,182 C76,170 75,158 70,150 Z" fill="#3f5f44"/>
+    </g>
+    <g id="arm-right" style="transform-box:fill-box;transform-origin:50% 5%">
+      <path d="M156,178 C163,208 160,248 153,286" stroke="#4a6b4f" stroke-width="15" fill="none" stroke-linecap="round"/>
+      <ellipse cx="132" cy="222" rx="6" ry="9" fill="#3d5a41" transform="rotate(-12 132 222)"/>
+      <ellipse cx="152" cy="292" rx="6" ry="8.5" fill="#d9a878"/>
+      <path d="M150,150 C162,154 169,166 166,184 C159,189 150,187 145,182 C144,170 145,158 150,150 Z" fill="#3f5f44"/>
+    </g>
+
+    <g id="torso">
+      <path d="M58,150 C66,136 88,126 110,126 C132,126 154,136 162,150 C166,180 165,208 160,236 C157,250 138,258 110,258 C82,258 63,250 60,236 C55,208 54,180 58,150 Z" fill="#4a6b4f"/>
+      <path d="M96,128 L110,146 L124,128 L117,124 Q110,133 103,124 Z" fill="#bcd4e6"/>
+      <ellipse cx="88" cy="222" rx="9" ry="6" fill="#3d5a41" opacity="0.85"/>
+      <ellipse cx="132" cy="222" rx="9" ry="6" fill="#3d5a41" opacity="0.85"/>
+      <path d="M78,180 L142,180" stroke="#3d5a41" stroke-width="1.4" opacity="0.4"/>
+    </g>
+
+    <g id="neck">
+      <path d="M99,102 L99,132 Q110,142 121,132 L121,102 Z" fill="#d9a878"/>
+      <path d="M99,106 Q110,116 121,106 L121,111 Q110,120 99,111 Z" fill="#c08e63" opacity="0.35"/>
+    </g>
+
+    <g id="head" style="transform-box:fill-box;transform-origin:50% 88%">
+      <path d="M110,22 C84,22 70,46 71,72 C72,96 84,114 110,120 C136,114 148,96 149,72 C150,46 136,22 110,22 Z" fill="#e8b78d"/>
+      <path d="M136,88 C132,100 122,110 112,114" stroke="#c9976a" stroke-width="1.5" fill="none" opacity="0.3"/>
+
+      <ellipse id="cheek-left" cx="84" cy="94" rx="6.5" ry="3.8" fill="#d68f78" opacity="0.16"/>
+      <ellipse id="cheek-right" cx="136" cy="94" rx="6.5" ry="3.8" fill="#d68f78" opacity="0.16"/>
+
+      <!-- short grey/white hair sits entirely in hair-front (below); no separate
+           back layer needed for a front-view head, avoids overlap artifacts -->
+
+
+      <g id="brows">
+        <path id="brow-left" style="transform-box:fill-box;transform-origin:50% 50%"
+              d="M76,56 Q88,50 100,55" stroke="#a6a6a0" stroke-width="4" fill="none" stroke-linecap="round"/>
+        <path id="brow-right" style="transform-box:fill-box;transform-origin:50% 50%"
+              d="M120,55 Q132,50 144,56" stroke="#a6a6a0" stroke-width="4" fill="none" stroke-linecap="round"/>
+      </g>
+
+      <g id="eyes" style="transform-box:fill-box;transform-origin:50% 50%">
+        <path d="M78,64 Q88,55 98,63 Q88,73 78,64 Z" fill="#fdfbf7"/>
+        <path d="M122,63 Q132,55 142,64 Q132,73 122,63 Z" fill="#fdfbf7"/>
+        <g clip-path="url(#gus-eye-left)">
+          <g class="iris">
+            <circle cx="88" cy="64.5" r="4.6" fill="#6d7d8a"/>
+            <circle cx="88" cy="64.5" r="2.1" fill="#1e1410"/>
+            <circle cx="86.6" cy="63.1" r="1" fill="#fff"/>
+          </g>
+        </g>
+        <g clip-path="url(#gus-eye-right)">
+          <g class="iris">
+            <circle cx="132" cy="64.5" r="4.6" fill="#6d7d8a"/>
+            <circle cx="132" cy="64.5" r="2.1" fill="#1e1410"/>
+            <circle cx="130.6" cy="63.1" r="1" fill="#fff"/>
+          </g>
+        </g>
+        <path d="M78,63.6 Q88,54.6 98,63" stroke="#241a12" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+        <path d="M122,63 Q132,54.6 142,63.6" stroke="#241a12" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+        <path d="M76,60 Q88,53 101,60" stroke="#6b4a33" stroke-width="1.1" fill="none" opacity="0.35"/>
+        <path d="M119,60 Q132,53 144,60" stroke="#6b4a33" stroke-width="1.1" fill="none" opacity="0.35"/>
+      </g>
+
+      <!-- simple round glasses frame, targetable so 'adjust' can nudge it -->
+      <g id="glasses">
+        <rect x="71" y="53" width="30" height="22" rx="10" fill="#ffffff" opacity="0.04" stroke="#3a3a3a" stroke-width="2.6"/>
+        <rect x="119" y="53" width="30" height="22" rx="10" fill="#ffffff" opacity="0.04" stroke="#3a3a3a" stroke-width="2.6"/>
+        <path d="M101,63 L119,63" stroke="#3a3a3a" stroke-width="2.6" fill="none"/>
+        <path d="M71,60 L62,65" stroke="#3a3a3a" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+        <path d="M149,60 L158,65" stroke="#3a3a3a" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+      </g>
+
+      <g id="nose">
+        <path d="M105,70 Q102,84 98,95" stroke="#af7a52" stroke-width="1.6" fill="none" opacity="0.5"/>
+        <path d="M98,96 Q105,100.5 113,97" stroke="#94623f" stroke-width="1.6" fill="none" stroke-linecap="round" opacity="0.85"/>
+      </g>
+
+      <!-- short grey beard + mustache, drawn behind the mouths so a mouth-shape "opens" through it -->
+      <g id="beard">
+        <path d="M73,82 Q71,104 88,116 Q99,122 110,122 Q121,122 132,116 Q149,104 147,82
+                 Q148,102 133,113 Q122,120 110,120.5 Q98,120 87,113 Q72,102 73,82 Z" fill="#d6d6ce" stroke="#bcbcb2" stroke-width="0.8"/>
+        <path d="M91,97 Q100,101.5 110,99 Q120,101.5 129,97 Q120,94.5 110,96.5 Q100,94.5 91,97 Z" fill="#cfcfc7" stroke="#b0b0a6" stroke-width="0.8"/>
+      </g>
+
+      <!-- Rhubarb visemes as lip shapes with teeth/tongue where called for -->
+      <g id="mouths">
+        <g id="mouth-X">
+          <path d="M98,101.6 C103,98.6 107,99.4 110,100.8 C113,99.4 117,98.6 122,101.6 C117,103 113,103.4 110,103.4 C107,103.4 103,103 98,101.6 Z" fill="#7a4a48"/>
+          <path d="M99,102 Q110,108.6 121,102 Q110,104.8 99,102 Z" fill="#8f5b58"/>
+        </g>
+        <g id="mouth-A">
+          <path d="M97,101.6 Q110,98.8 123,101.6 Q110,103.2 97,101.6 Z" fill="#7a4a48"/>
+          <path d="M98,102 Q110,106.6 122,102 Q110,103.6 98,102 Z" fill="#8f5b58"/>
+        </g>
+        <g id="mouth-B">
+          <path d="M99,100.5 Q110,98 121,100.5 Q121,106.5 110,107.5 Q99,106.5 99,100.5 Z" fill="#3d2320"/>
+          <rect x="102" y="100.6" width="16" height="3" rx="1.2" fill="#f5f0e8"/>
+          <path d="M99,100.5 Q110,97.8 121,100.5" stroke="#7a4a48" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+          <path d="M99,100.8 Q110,108.5 121,100.8" stroke="#8f5b58" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+        </g>
+        <g id="mouth-C">
+          <path d="M100,99 Q110,96.5 120,99 Q122,107 110,110 Q98,107 100,99 Z" fill="#3d2320"/>
+          <rect x="102" y="99.4" width="16" height="3.4" rx="1.4" fill="#f5f0e8"/>
+          <path d="M100,99 Q110,96.2 120,99 Q122,107.5 110,110.5 Q98,107.5 100,99 Z" stroke="#7a4a48" stroke-width="1.6" fill="none"/>
+        </g>
+        <g id="mouth-D">
+          <path d="M97,98 Q110,95 123,98 Q126,109 110,114 Q94,109 97,98 Z" fill="#3d2320"/>
+          <rect x="100" y="98.6" width="20" height="3.6" rx="1.5" fill="#f5f0e8"/>
+          <ellipse cx="110" cy="109.5" rx="8" ry="3.5" fill="#844d4f"/>
+          <path d="M97,98 Q110,94.6 123,98 Q126,109.5 110,114.5 Q94,109.5 97,98 Z" stroke="#7a4a48" stroke-width="1.6" fill="none"/>
+        </g>
+        <g id="mouth-E">
+          <ellipse cx="110" cy="103.5" rx="7.5" ry="5.5" fill="#3d2320"/>
+          <ellipse cx="110" cy="103.5" rx="7.5" ry="5.5" stroke="#7a4a48" stroke-width="1.8" fill="none"/>
+        </g>
+        <g id="mouth-F">
+          <ellipse cx="110" cy="103" rx="4.6" ry="5.6" fill="#3d2320"/>
+          <ellipse cx="110" cy="103" rx="5.4" ry="6.4" stroke="#8f5b58" stroke-width="2.6" fill="none"/>
+        </g>
+        <g id="mouth-G">
+          <rect x="103" y="100" width="14" height="3.4" rx="1.4" fill="#f5f0e8" stroke="#5f3936" stroke-width="0.8"/>
+          <path d="M100,105 Q110,108.5 120,105" stroke="#8f5b58" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+        </g>
+        <g id="mouth-H">
+          <path d="M100,99.5 Q110,97 120,99.5 Q122,108 110,110.5 Q98,108 100,99.5 Z" fill="#3d2320"/>
+          <ellipse cx="110" cy="101.4" rx="5.5" ry="2.6" fill="#844d4f"/>
+          <path d="M100,99.5 Q110,96.7 120,99.5 Q122,108.5 110,111 Q98,108.5 100,99.5 Z" stroke="#7a4a48" stroke-width="1.6" fill="none"/>
+        </g>
+      </g>
+
+      <g id="hair-front">
+        <path d="M73,50 C72,27 90,17 110,17 C130,17 148,27 147,50 C147,55 146,59 145,62 C143,40 129,31 110,31 C91,31 77,40 75,62 C74,59 73,55 73,50 Z" fill="#d6d6ce"/>
+        <path d="M110,18 C109,23 109,27 110,31" stroke="#b7b7ae" stroke-width="1.1" fill="none" opacity="0.6"/>
+        <path d="M90,20 C86,24 82,29 80,35" stroke="#b7b7ae" stroke-width="1" fill="none" opacity="0.5"/>
+        <path d="M130,20 C134,24 138,29 140,35" stroke="#b7b7ae" stroke-width="1" fill="none" opacity="0.5"/>
+      </g>
+    </g>
+  </g>
+</svg>

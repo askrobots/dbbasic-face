@@ -1,0 +1,169 @@
+{
+  "name": "Mae",
+  "svg": "puppet.svg",
+  "height": 560,
+  "voice": {
+    "engine": "say",
+    "voice": "Karen"
+  },
+  "mouths": {
+    "A": "#mouth-A",
+    "B": "#mouth-B",
+    "C": "#mouth-C",
+    "D": "#mouth-D",
+    "E": "#mouth-E",
+    "F": "#mouth-F",
+    "G": "#mouth-G",
+    "H": "#mouth-H",
+    "X": "#mouth-X"
+  },
+  "restMouth": "X",
+  "blink": {
+    "target": "#eyes"
+  },
+  "look": {
+    "target": "#pupils",
+    "dx": 4,
+    "dy": 2
+  },
+  "walk": {
+    "speed": 200,
+    "bob": true
+  },
+  "views": {
+    "face": {
+      "focus": "#head",
+      "fill": 0.6,
+      "centerY": 0.47
+    }
+  },
+  "idle": {
+    "breathe": {
+      "target": "#body",
+      "amount": 1.3,
+      "period": 4200
+    },
+    "gaze": true
+  },
+  "actions": {
+    "wave": {
+      "tracks": [
+        {
+          "target": "#arm-right",
+          "duration": 1600,
+          "keyframes": [
+            { "transform": "rotate(0deg)" },
+            { "transform": "rotate(-160deg)", "offset": 0.25 },
+            { "transform": "rotate(-130deg)", "offset": 0.4 },
+            { "transform": "rotate(-160deg)", "offset": 0.55 },
+            { "transform": "rotate(-130deg)", "offset": 0.7 },
+            { "transform": "rotate(0deg)" }
+          ]
+        }
+      ]
+    },
+    "nod": {
+      "tracks": [
+        {
+          "target": "#head",
+          "duration": 1100,
+          "keyframes": [
+            { "transform": "translateY(0)" },
+            { "transform": "translateY(8px)", "offset": 0.25 },
+            { "transform": "translateY(0)", "offset": 0.5 },
+            { "transform": "translateY(8px)", "offset": 0.75 },
+            { "transform": "translateY(0)" }
+          ]
+        }
+      ]
+    },
+    "shake": {
+      "tracks": [
+        {
+          "target": "#head",
+          "duration": 1100,
+          "keyframes": [
+            { "transform": "translateX(0)" },
+            { "transform": "translateX(-9px)", "offset": 0.2 },
+            { "transform": "translateX(9px)", "offset": 0.45 },
+            { "transform": "translateX(-9px)", "offset": 0.7 },
+            { "transform": "translateX(0)" }
+          ]
+        }
+      ]
+    },
+    "curtsy": {
+      "tracks": [
+        {
+          "target": "#puppet",
+          "duration": 1700,
+          "easing": "ease-in-out",
+          "keyframes": [
+            { "transform": "translateY(0)" },
+            { "transform": "translateY(12px)", "offset": 0.4 },
+            { "transform": "translateY(12px)", "offset": 0.6 },
+            { "transform": "translateY(0)" }
+          ]
+        },
+        {
+          "target": "#head",
+          "duration": 1700,
+          "easing": "ease-in-out",
+          "keyframes": [
+            { "transform": "translateY(0) rotate(0deg)" },
+            { "transform": "translateY(4px) rotate(8deg)", "offset": 0.4 },
+            { "transform": "translateY(4px) rotate(8deg)", "offset": 0.6 },
+            { "transform": "translateY(0) rotate(0deg)" }
+          ]
+        },
+        {
+          "target": "#body",
+          "duration": 1700,
+          "easing": "ease-in-out",
+          "keyframes": [
+            { "transform": "scale(1,1)" },
+            { "transform": "scale(1.08,0.95)", "offset": 0.4 },
+            { "transform": "scale(1.08,0.95)", "offset": 0.6 },
+            { "transform": "scale(1,1)" }
+          ]
+        }
+      ]
+    },
+    "happy": {
+      "hold": true,
+      "tracks": [
+        { "target": "#brow-left", "duration": 300, "fill": "forwards",
+          "keyframes": [{ "transform": "translateY(0)" }, { "transform": "translateY(-4px)" }] },
+        { "target": "#brow-right", "duration": 300, "fill": "forwards",
+          "keyframes": [{ "transform": "translateY(0)" }, { "transform": "translateY(-4px)" }] },
+        { "target": "#cheek-left", "duration": 300, "fill": "forwards",
+          "keyframes": [{ "opacity": 0.4 }, { "opacity": 0.9 }] },
+        { "target": "#cheek-right", "duration": 300, "fill": "forwards",
+          "keyframes": [{ "opacity": 0.4 }, { "opacity": 0.9 }] }
+      ]
+    },
+    "sad": {
+      "hold": true,
+      "tracks": [
+        { "target": "#brow-left", "duration": 300, "fill": "forwards",
+          "keyframes": [{ "transform": "rotate(0deg) translateY(0)" }, { "transform": "rotate(12deg) translateY(3px)" }] },
+        { "target": "#brow-right", "duration": 300, "fill": "forwards",
+          "keyframes": [{ "transform": "rotate(0deg) translateY(0)" }, { "transform": "rotate(-12deg) translateY(3px)" }] },
+        { "target": "#head", "duration": 300, "fill": "forwards",
+          "keyframes": [{ "transform": "translateY(0)" }, { "transform": "translateY(6px)" }] }
+      ]
+    },
+    "surprised": {
+      "hold": true,
+      "tracks": [
+        { "target": "#brow-left", "duration": 250, "fill": "forwards",
+          "keyframes": [{ "transform": "translateY(0)" }, { "transform": "translateY(-7px)" }] },
+        { "target": "#brow-right", "duration": 250, "fill": "forwards",
+          "keyframes": [{ "transform": "translateY(0)" }, { "transform": "translateY(-7px)" }] },
+        { "target": "#eyes", "duration": 250, "fill": "forwards",
+          "keyframes": [{ "transform": "scale(1)" }, { "transform": "scale(1.2)" }] }
+      ]
+    },
+    "neutral": { "reset": true, "tracks": [] }
+  }
+}
