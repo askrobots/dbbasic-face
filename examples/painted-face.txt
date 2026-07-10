@@ -1,0 +1,33 @@
+# The painted face: three shades that change other people, not the wearer.
+[captions on]
+[fade in 800]
+[frame main character:mae bg:curtain view:body]
+They say my makeup is only paint. Sit down, and watch what paint can do.
+[layout split]
+[frame left character:mae bg:room view:face]
+[frame right character:gus bg:room view:face]
+[lower-third "The shade" "Crimson: rage"]
+left: First, the crimson. Gus, dear, come a little closer.
+[right walk 15]
+right: Of course, I... you... WHY am I suddenly FURIOUS at everything?!
+[right shake] [right emote surprised]
+left: Not at me, darling. Never at me. That is the trick of it.
+[lower-third "The shade" "Rose: love"]
+left: Now, the rose.
+[right emote neutral] [wait 0.5]
+right: Oh. Oh my. Has your hair always caught the light like that?
+[right emote happy] [left curtsy]
+left: Careful, professor. It wears off. The embarrassment does not.
+[lower-third "The shade" "Gold: obedience"]
+left: And last, the gold. Gus — adjust your glasses.
+[right adjust]
+right: ...Why did I just do that?
+left: You heard gold. Gold is very hard not to hear.
+[lower-third clear]
+[layout single]
+[frame main character:mae bg:curtain view:face]
+Rage to make you lash out. Rose to make you foolish. Gold to make you mine.
+[emote sad]
+None of them ever changed my face. They only ever changed yours.
+Ask what a face is doing to you, before you decide what you feel near it.
+[iris out 1200]
