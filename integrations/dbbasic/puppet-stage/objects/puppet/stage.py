@@ -185,14 +185,15 @@ _HTML = r'''<!doctype html>
         <h3>Speaking</h3>
         <dl>
           <dt>text</dt><dd>speak as the target frame's character</dd>
-          <dt>frame: text</dt><dd>speak on a named frame's character</dd>
+          <dt>frame: text</dt><dd>speak on a named frame/actor id, or (once framed/placed) a character's own name, e.g. rex: text</dd>
           <dt>(action) text</dt><dd>run an action while the line is spoken</dd>
         </dl>
+        <p style="margin:6px 0 0;color:#8b93ab">Once a character is framed/placed you can target it by name anywhere an id works — <code>[rex sit]</code>, <code>rex: Hi!</code>, <code>[wear rex tophat]</code> — resolution order is frame id → actor id → name. A bracketed speaker line like <code>[left: Hi!]</code> is tolerated too, but prefer the unbracketed form.</p>
 
         <h3>Movement &amp; camera</h3>
         <dl>
           <dt>[wait N]</dt><dd>pause N seconds</dd>
-          <dt>[walk to N]</dt><dd>glide to N% of stage width</dd>
+          <dt>[walk to N]</dt><dd>glide to N% of stage width, or left|center|middle|right (25/50/75)</dd>
           <dt>[enter from left|right]</dt><dd>walk on from offstage</dd>
           <dt>[exit left|right]</dt><dd>walk off that side</dd>
           <dt>[look left|right|up|down|front]</dt><dd>gaze direction</dd>
@@ -228,7 +229,7 @@ _HTML = r'''<!doctype html>
 
         <h3>Cast &amp; props</h3>
         <dl>
-          <dt>[place what at x scale:s]</dt><dd>place a prop/character actor (id: behind: optional)</dd>
+          <dt>[place what at x scale:s]</dt><dd>place a prop/character actor (x: number or left|center|middle|right; id: behind: optional)</dd>
           <dt>[id move N / scale N]</dt><dd>glide / resize a prop actor</dd>
           <dt>[id spin] [id bounce]</dt><dd>prop actor flourishes</dd>
           <dt>[wear target prop]</dt><dd>pin a prop to an anchor (default head)</dd>
@@ -445,9 +446,45 @@ _HTML = r'''<!doctype html>
     return out;
   }
 
-  function directionCue(body, frameIds, actorIds) {
+  // left/center|middle/right resolve to stage-percent positions (25/50/75,
+  // case-insensitive); anything else parses as a literal percent number.
+  // Mirrors server.js exactly. Does NOT apply to [enter/exit] left|right,
+  // which mean off-stage sides, not on-stage positions.
+  function parsePosWord(v) {
+    const w = String(v == null ? '' : v).toLowerCase();
+    if (w === 'left') return 25;
+    if (w === 'center' || w === 'middle') return 50;
+    if (w === 'right') return 75;
+    return parseFloat(v);
+  }
+
+  // Resolves a bare id/name to the frame or actor it refers to: a declared
+  // frame id or actor id wins as-is; otherwise, if `id` names a character
+  // who's been framed/placed (tracked in charLocs), resolve through that
+  // mapping. Falls back to `id` itself (unresolved). Mirrors server.js.
+  function resolveTarget(id, frameIds, actorIds, charLocs) {
+    if (frameIds.has(id) || actorIds.has(id)) return id;
+    const loc = charLocs && charLocs.get(id);
+    return loc ? loc.id : id;
+  }
+
+  // Speaker-prefix resolution shared by plain "<id>: text" lines and the
+  // bracket-line tolerance in parseScript: frame id -> actor id -> character
+  // name (via charLocs). Mirrors server.js's matchSpeaker exactly.
+  function matchSpeaker(text, frameIds, actorIds, charLocs) {
+    const m = text.match(/^([A-Za-z][\w-]*):\s*(.*)$/);
+    if (!m) return null;
+    if (frameIds.has(m[1])) return { frame: m[1], text: m[2] };
+    if (actorIds.has(m[1])) return { actor: m[1], text: m[2] };
+    const loc = charLocs && charLocs.get(m[1]);
+    if (loc) return loc.kind === 'frame' ? { frame: loc.id, text: m[2] } : { actor: loc.id, text: m[2] };
+    return null;
+  }
+
+  function directionCue(body, frameIds, actorIds, charLocs) {
     frameIds = frameIds || new Set(['main']);
     actorIds = actorIds || new Set();
+    charLocs = charLocs || new Map();
     const parts = body.trim().split(/\s+/);
     const head = parts[0].toLowerCase();
 
@@ -475,6 +512,7 @@ _HTML = r'''<!doctype html>
       if (kv.facing !== undefined) cue.facing = parseInt(kv.facing, 10);
       if (kv.rect) cue.rect = kv.rect.split(',').map(Number);
       frameIds.add(id);
+      if (kv.character) charLocs.set(kv.character, { kind: 'frame', id });
       return cue;
     }
 
@@ -507,12 +545,12 @@ _HTML = r'''<!doctype html>
     }
 
     if (head === 'walk' || head === 'enter' || head === 'exit') {
+      // walk's left/right are on-stage position words (25/75); enter/exit's
+      // left/right stay off-stage sides — handled separately below.
       const arg = parts[parts.length - 1].toLowerCase();
-      let x = parseFloat(arg);
+      let x = head === 'walk' ? parsePosWord(arg) : parseFloat(arg);
       if (head === 'enter') x = 50;
-      if (head === 'exit' || arg === 'left' || arg === 'right') {
-        if (isNaN(x)) x = arg === 'left' ? -15 : 115;
-      }
+      else if (head === 'exit' && isNaN(x)) x = arg === 'left' ? -15 : 115;
       const from = parts.includes('from') ? parts[parts.indexOf('from') + 1] || '' : null;
       return { type: 'walk', x, from, jump: head === 'enter' ? from : null };
     }
@@ -533,11 +571,12 @@ _HTML = r'''<!doctype html>
     }
 
     if (head === 'place') {
-      // [place <what> at <x> [id:<id>] [scale:<n>] [behind]]
+      // [place <what> at <x> [id:<id>] [scale:<n>] [behind]] — <x> accepts a
+      // percent number or left|center|middle|right (25/50/75).
       const rest = parts.slice(1);
       const what = rest[0];
       const atIdx = rest.indexOf('at');
-      const x = atIdx >= 0 ? parseFloat(rest[atIdx + 1]) : NaN;
+      const x = atIdx >= 0 ? parsePosWord(rest[atIdx + 1]) : NaN;
       const restStr = parts.slice(1).join(' ');
       const kv = parseKV(restStr);
       const id = kv.id || what;
@@ -545,6 +584,10 @@ _HTML = r'''<!doctype html>
       if (kv.scale !== undefined) cue.scale = parseFloat(kv.scale);
       if (/\bbehind\b/.test(restStr)) cue.behind = true;
       actorIds.add(id);
+      // `what` names a character iff it's an embedded PUPPET_CHARACTERS key
+      // — track where it now lives so later `[<what> ...]`/`what: text`
+      // addresses it (mirrors server.js's fs.existsSync check).
+      if (CHARACTERS[what]) charLocs.set(what, { kind: 'actor', id });
       return cue;
     }
 
@@ -555,8 +598,9 @@ _HTML = r'''<!doctype html>
     }
 
     if (head === 'wear') {
-      // [wear <target> <prop> [scale:<n>] [anchor:<name>]]
-      const target = parts[1];
+      // [wear <target> <prop> [scale:<n>] [anchor:<name>]] — target resolves
+      // frame id -> actor id -> character name (see resolveTarget).
+      const target = resolveTarget(parts[1], frameIds, actorIds, charLocs);
       const prop = parts[2];
       const kv = parseKV(parts.slice(3).join(' '));
       const cue = { type: 'wear', target, prop };
@@ -566,7 +610,7 @@ _HTML = r'''<!doctype html>
     }
 
     if (head === 'unwear') {
-      const target = parts[1];
+      const target = resolveTarget(parts[1], frameIds, actorIds, charLocs);
       const cue = { type: 'unwear', target };
       if (parts[2]) cue.anchor = parts[2];
       return cue;
@@ -582,22 +626,34 @@ _HTML = r'''<!doctype html>
 
     // Prop-actor directions, reached via the actorIds fallback below (e.g.
     // [hoop1 move 40] recurses into directionCue("move 40", ...)).
-    if (head === 'move') return { type: 'move', x: parseFloat(parts[1]) };
+    if (head === 'move') return { type: 'move', x: parsePosWord(parts[1]) };
     if (head === 'scale') return { type: 'scale', value: parseFloat(parts[1]) };
     if (head === 'spin') return { type: 'spin' };
     if (head === 'bounce') return { type: 'bounce' };
 
     if (frameIds.has(head) && parts.length > 1) {
-      const sub = directionCue(parts.slice(1).join(' '), frameIds, actorIds);
+      const sub = directionCue(parts.slice(1).join(' '), frameIds, actorIds, charLocs);
       sub.frame = head;
       return sub;
     }
 
     // Same, for a placed actor id (checked after frame ids, per spec).
     if (actorIds.has(head) && parts.length > 1) {
-      const sub = directionCue(parts.slice(1).join(' '), frameIds, actorIds);
+      const sub = directionCue(parts.slice(1).join(' '), frameIds, actorIds, charLocs);
       sub.actor = head;
       return sub;
+    }
+
+    // Same, for a character NAME that's been framed/placed (checked after
+    // frame ids and actor ids, per spec) — e.g. [rex sit] once rex occupies
+    // a frame or actor slot; resolves to whichever one it currently occupies.
+    {
+      const loc = charLocs.get(head);
+      if (loc && parts.length > 1) {
+        const sub = directionCue(parts.slice(1).join(' '), frameIds, actorIds, charLocs);
+        if (loc.kind === 'frame') sub.frame = loc.id; else sub.actor = loc.id;
+        return sub;
+      }
     }
 
     // [clear] — wipe placed actors/worn props/content tiles/overlays across
@@ -611,25 +667,43 @@ _HTML = r'''<!doctype html>
     const cues = [];
     const frameIds = new Set(['main']);
     const actorIds = new Set(); // tracks ids declared by [place ...] as we go
+    // character name -> {kind:'frame'|'actor', id} it currently occupies —
+    // mirrors server.js's charLocs so writers can address characters by
+    // name once framed/placed; later assignments override earlier ones.
+    const charLocs = new Map();
     for (const rawLine of src.split('\n')) {
       const line = rawLine.trim();
       if (!line || line.startsWith('#')) continue;
       if (/^(\[[^\]]+\]\s*)+$/.test(line)) {
-        for (const m of line.matchAll(/\[([^\]]+)\]/g)) cues.push({ ...directionCue(m[1], frameIds, actorIds), source: line });
+        for (const m of line.matchAll(/\[([^\]]+)\]/g)) {
+          const inner = m[1];
+          // Tolerance: `[left: some words]` / `[<name>: words]` is a spoken
+          // line wearing brackets by mistake — unwrap it instead of
+          // treating it as an unknown direction, but only when the label
+          // actually resolves. Mirrors server.js.
+          const sp = matchSpeaker(inner, frameIds, actorIds, charLocs);
+          if (sp) {
+            const cue = { type: 'speak-line', text: sp.text, concurrent: null, source: line };
+            if (sp.frame) cue.frame = sp.frame;
+            if (sp.actor) cue.actor = sp.actor;
+            cues.push(cue);
+          } else {
+            cues.push({ ...directionCue(inner, frameIds, actorIds, charLocs), source: line });
+          }
+        }
         continue;
       }
 
       let text = line;
       let frame = null;
       let actor = null;
-      const speaker = text.match(/^([A-Za-z][\w-]*):\s*(.*)$/);
-      if (speaker && frameIds.has(speaker[1])) { frame = speaker[1]; text = speaker[2]; }
-      else if (speaker && actorIds.has(speaker[1])) { actor = speaker[1]; text = speaker[2]; }
+      const sp = matchSpeaker(text, frameIds, actorIds, charLocs);
+      if (sp) { frame = sp.frame || null; actor = sp.actor || null; text = sp.text; }
 
       let concurrent = null;
       const inline = text.match(/^\(([^)]+)\)\s*(.*)$/);
       if (inline) {
-        concurrent = { ...directionCue(inline[1], frameIds, actorIds), source: line };
+        concurrent = { ...directionCue(inline[1], frameIds, actorIds, charLocs), source: line };
         text = inline[2];
         if (frame) concurrent.frame = frame;
         if (actor) concurrent.actor = actor;
@@ -1736,12 +1810,34 @@ class Stage {
 
   // `target` is a frame id (its primary character) or an actor id; frame
   // ids resolve first, matching every other target-resolution rule here.
+  // Falls back to a character-name search (see findPuppetByCharacterName)
+  // as belt-and-braces — normally the parser has already resolved a
+  // character name to its frame/actor id by the time a cue gets here.
   resolveWearTarget(targetId) {
     const f = this.frames.get(targetId);
     if (f && f.puppet) return f.puppet;
     for (const cand of this.frames.values()) {
       const a = cand.actors.get(targetId);
       if (a && a.puppet) return a.puppet;
+    }
+    return this.findPuppetByCharacterName(targetId);
+  }
+
+  // Belt-and-braces: find a puppet whose loaded character matches `name`,
+  // checking each frame's primary character first, then its actors. Only
+  // reached when a cue's frame/actor/target id doesn't resolve as an id —
+  // normally the parser has already turned a character name into a real
+  // frame/actor id by the time a cue reaches the client. Kept cheap: two
+  // flat passes over already-loaded puppets, no network/DOM work.
+  findPuppetByCharacterName(name) {
+    if (!name) return null;
+    for (const f of this.frames.values()) {
+      if (f.puppet && f.puppet.characterName === name) return f.puppet;
+    }
+    for (const f of this.frames.values()) {
+      for (const a of f.actors.values()) {
+        if (a.puppet && a.puppet.characterName === name) return a.puppet;
+      }
     }
     return null;
   }
@@ -2186,12 +2282,18 @@ function mainPuppet() {
 
 // Character direction (speak/action/walk/look/view) targets an actor's
 // Puppet when the cue carries `actor`, else the frame's primary — same
-// resolution order the parser applies (frame id, then actor id).
+// resolution order the parser applies (frame id, then actor id, then
+// character name). Belt-and-braces: normally the parser has already
+// resolved a character name to a real frame/actor id, but if a cue arrives
+// with an id that doesn't resolve, fall back to matching it as a character
+// name across every frame's primary and actors.
 function puppetForCue(cue) {
   if (cue.actor) {
     const a = stage.resolveActor(cue);
-    return a ? a.puppet : null;
+    if (a) return a.puppet;
+    return stage.findPuppetByCharacterName(cue.actor);
   }
+  if (cue.frame && !stage.frames.has(cue.frame)) return stage.findPuppetByCharacterName(cue.frame);
   return stage.forFrame(cue);
 }
 

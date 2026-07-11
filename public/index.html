@@ -179,14 +179,15 @@
         <h3>Speaking</h3>
         <dl>
           <dt>text</dt><dd>speak as the target frame's character</dd>
-          <dt>frame: text</dt><dd>speak on a named frame's character</dd>
+          <dt>frame: text</dt><dd>speak on a named frame/actor id, or (once framed/placed) a character's own name, e.g. rex: text</dd>
           <dt>(action) text</dt><dd>run an action while the line is spoken</dd>
         </dl>
+        <p style="margin:6px 0 0;color:#8b93ab">Once a character is framed/placed you can target it by name anywhere an id works — <code>[rex sit]</code>, <code>rex: Hi!</code>, <code>[wear rex tophat]</code> — resolution order is frame id → actor id → name. A bracketed speaker line like <code>[left: Hi!]</code> is tolerated too, but prefer the unbracketed form.</p>
 
         <h3>Movement &amp; camera</h3>
         <dl>
           <dt>[wait N]</dt><dd>pause N seconds</dd>
-          <dt>[walk to N]</dt><dd>glide to N% of stage width</dd>
+          <dt>[walk to N]</dt><dd>glide to N% of stage width, or left|center|middle|right (25/50/75)</dd>
           <dt>[enter from left|right]</dt><dd>walk on from offstage</dd>
           <dt>[exit left|right]</dt><dd>walk off that side</dd>
           <dt>[look left|right|up|down|front]</dt><dd>gaze direction</dd>
@@ -222,7 +223,7 @@
 
         <h3>Cast &amp; props</h3>
         <dl>
-          <dt>[place what at x scale:s]</dt><dd>place a prop/character actor (id: behind: optional)</dd>
+          <dt>[place what at x scale:s]</dt><dd>place a prop/character actor (x: number or left|center|middle|right; id: behind: optional)</dd>
           <dt>[id move N / scale N]</dt><dd>glide / resize a prop actor</dd>
           <dt>[id spin] [id bounce]</dt><dd>prop actor flourishes</dd>
           <dt>[wear target prop]</dt><dd>pin a prop to an anchor (default head)</dd>

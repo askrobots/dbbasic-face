@@ -129,6 +129,15 @@ async function probeRhubarb() {
   return rhubarbOk;
 }
 
+// Per-key in-flight render dedup: two concurrent callers for the same cache
+// key (e.g. a script re-performed while its render-ahead window is still
+// in flight, or /api/say racing that same render-ahead) must not both render
+// to the same raw temp path — the second render's ffmpeg step can lose the
+// race against the first's cleanup unlink ("ffmpeg failed"). Instead, the
+// second caller awaits the first's promise and both read the same result.
+const speechInFlight = new Map(); // key -> Promise<void>
+const externalAudioInFlight = new Map(); // key -> Promise<void>
+
 /**
  * Render `text` with the given engine and produce {audio, timeline, duration}.
  * Results are cached by content hash in cache/.
@@ -140,50 +149,65 @@ async function prepareSpeech({ text, engine = 'say', voice = '', rate = 0 }) {
   const meta = path.join(CACHE, `${key}.meta.json`);
 
   if (!fs.existsSync(wav) || !fs.existsSync(meta)) {
-    const raw = path.join(CACHE, `${key}.raw.${engine === 'say' ? 'aiff' : 'wav'}`);
-    if (engine === 'say') {
-      const args = ['-o', raw];
-      if (voice) args.push('-v', voice);
-      if (rate) args.push('-r', String(rate));
-      args.push(text);
-      await run('say', args);
-    } else {
-      const args = ['-w', raw];
-      if (voice) args.push('-v', voice);
-      if (rate) args.push('-s', String(rate));
-      args.push(text);
-      await run('espeak', args);
+    let p = speechInFlight.get(key);
+    if (!p) {
+      p = renderSpeech(key, wav, meta, { text, engine, voice, rate });
+      speechInFlight.set(key, p);
+      p.finally(() => {
+        if (speechInFlight.get(key) === p) speechInFlight.delete(key);
+      });
     }
-    await run('ffmpeg', ['-y', '-loglevel', 'error', '-i', raw,
-      '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', wav]);
-    fs.unlinkSync(raw);
-
-    let timeline = null;
-    let duration = 0;
-    if (await probeRhubarb()) {
-      try {
-        const dialog = path.join(CACHE, `${key}.txt`);
-        fs.writeFileSync(dialog, text);
-        const out = await run(RHUBARB, ['-f', 'json', '--extendedShapes', 'GHX',
-          '--dialogFile', dialog, wav]);
-        const parsed = JSON.parse(out);
-        timeline = parsed.mouthCues;
-        duration = parsed.metadata.duration;
-        fs.unlinkSync(dialog);
-      } catch (e) {
-        console.warn('rhubarb failed for this clip:', e.message);
-      }
-    }
-    if (!duration) {
-      const probe = await run('ffprobe', ['-v', 'error', '-show_entries',
-        'format=duration', '-of', 'csv=p=0', wav]);
-      duration = parseFloat(probe) || 0;
-    }
-    fs.writeFileSync(meta, JSON.stringify({ timeline, duration }));
+    await p;
   }
 
   const { timeline, duration } = JSON.parse(fs.readFileSync(meta, 'utf8'));
   return { audio: `/audio/${key}.wav`, timeline, duration, text };
+}
+
+// Does the actual say/espeak -> ffmpeg -> rhubarb render for prepareSpeech.
+// Split out so prepareSpeech can dedup concurrent callers on `key` instead
+// of each starting its own render into the same raw temp path.
+async function renderSpeech(key, wav, meta, { text, engine, voice, rate }) {
+  const raw = path.join(CACHE, `${key}.raw.${engine === 'say' ? 'aiff' : 'wav'}`);
+  if (engine === 'say') {
+    const args = ['-o', raw];
+    if (voice) args.push('-v', voice);
+    if (rate) args.push('-r', String(rate));
+    args.push(text);
+    await run('say', args);
+  } else {
+    const args = ['-w', raw];
+    if (voice) args.push('-v', voice);
+    if (rate) args.push('-s', String(rate));
+    args.push(text);
+    await run('espeak', args);
+  }
+  await run('ffmpeg', ['-y', '-loglevel', 'error', '-i', raw,
+    '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', wav]);
+  fs.unlinkSync(raw);
+
+  let timeline = null;
+  let duration = 0;
+  if (await probeRhubarb()) {
+    try {
+      const dialog = path.join(CACHE, `${key}.txt`);
+      fs.writeFileSync(dialog, text);
+      const out = await run(RHUBARB, ['-f', 'json', '--extendedShapes', 'GHX',
+        '--dialogFile', dialog, wav]);
+      const parsed = JSON.parse(out);
+      timeline = parsed.mouthCues;
+      duration = parsed.metadata.duration;
+      fs.unlinkSync(dialog);
+    } catch (e) {
+      console.warn('rhubarb failed for this clip:', e.message);
+    }
+  }
+  if (!duration) {
+    const probe = await run('ffprobe', ['-v', 'error', '-show_entries',
+      'format=duration', '-of', 'csv=p=0', wav]);
+    duration = parseFloat(probe) || 0;
+  }
+  fs.writeFileSync(meta, JSON.stringify({ timeline, duration }));
 }
 
 /**
@@ -197,40 +221,55 @@ async function prepareExternalAudio(bytes, text = '') {
   const meta = path.join(CACHE, `${key}.meta.json`);
 
   if (!fs.existsSync(wav) || !fs.existsSync(meta)) {
-    const raw = path.join(CACHE, `${key}.raw`);
-    fs.writeFileSync(raw, bytes);
-    await run('ffmpeg', ['-y', '-loglevel', 'error', '-i', raw,
-      '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', wav]);
-    fs.unlinkSync(raw);
-
-    let timeline = null;
-    let duration = 0;
-    if (await probeRhubarb()) {
-      try {
-        const args = ['-f', 'json', '--extendedShapes', 'GHX'];
-        if (text) {
-          const dialog = path.join(CACHE, `${key}.txt`);
-          fs.writeFileSync(dialog, text);
-          args.push('--dialogFile', dialog);
-        }
-        const out = await run(RHUBARB, [...args, wav]);
-        const parsed = JSON.parse(out);
-        timeline = parsed.mouthCues;
-        duration = parsed.metadata.duration;
-      } catch (e) {
-        console.warn('rhubarb failed for external audio:', e.message);
-      }
+    let p = externalAudioInFlight.get(key);
+    if (!p) {
+      p = renderExternalAudio(key, wav, meta, bytes, text);
+      externalAudioInFlight.set(key, p);
+      p.finally(() => {
+        if (externalAudioInFlight.get(key) === p) externalAudioInFlight.delete(key);
+      });
     }
-    if (!duration) {
-      const probe = await run('ffprobe', ['-v', 'error', '-show_entries',
-        'format=duration', '-of', 'csv=p=0', wav]);
-      duration = parseFloat(probe) || 0;
-    }
-    fs.writeFileSync(meta, JSON.stringify({ timeline, duration }));
+    await p;
   }
 
   const { timeline, duration } = JSON.parse(fs.readFileSync(meta, 'utf8'));
   return { audio: `/audio/${key}.wav`, timeline, duration, text };
+}
+
+// Does the actual ffmpeg -> rhubarb render for prepareExternalAudio. Split
+// out so prepareExternalAudio can dedup concurrent callers on `key` instead
+// of each starting its own render into the same raw temp path.
+async function renderExternalAudio(key, wav, meta, bytes, text) {
+  const raw = path.join(CACHE, `${key}.raw`);
+  fs.writeFileSync(raw, bytes);
+  await run('ffmpeg', ['-y', '-loglevel', 'error', '-i', raw,
+    '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', wav]);
+  fs.unlinkSync(raw);
+
+  let timeline = null;
+  let duration = 0;
+  if (await probeRhubarb()) {
+    try {
+      const args = ['-f', 'json', '--extendedShapes', 'GHX'];
+      if (text) {
+        const dialog = path.join(CACHE, `${key}.txt`);
+        fs.writeFileSync(dialog, text);
+        args.push('--dialogFile', dialog);
+      }
+      const out = await run(RHUBARB, [...args, wav]);
+      const parsed = JSON.parse(out);
+      timeline = parsed.mouthCues;
+      duration = parsed.metadata.duration;
+    } catch (e) {
+      console.warn('rhubarb failed for external audio:', e.message);
+    }
+  }
+  if (!duration) {
+    const probe = await run('ffprobe', ['-v', 'error', '-show_entries',
+      'format=duration', '-of', 'csv=p=0', wav]);
+    duration = parseFloat(probe) || 0;
+  }
+  fs.writeFileSync(meta, JSON.stringify({ timeline, duration }));
 }
 
 // ---------------------------------------------------------- script runner
@@ -260,10 +299,51 @@ function parseKV(str) {
   return out;
 }
 
+// left/center|middle/right resolve to stage-percent positions (25/50/75,
+// case-insensitive); anything else parses as a literal percent number.
+// Used wherever a direction's x might be authored as a word instead of a
+// number: [place ... at <pos>], [walk to <pos>], [<id> walk <pos>],
+// [<id> move <pos>]. Does NOT apply to [enter/exit] left|right, which mean
+// off-stage sides, not on-stage positions.
+function parsePosWord(v) {
+  const w = String(v == null ? '' : v).toLowerCase();
+  if (w === 'left') return 25;
+  if (w === 'center' || w === 'middle') return 50;
+  if (w === 'right') return 75;
+  return parseFloat(v);
+}
+
+// Resolves a bare id/name to the frame or actor it refers to: a declared
+// frame id or actor id wins as-is; otherwise, if `id` names a character
+// who's been framed/placed (tracked in charLocs, see parseScript), resolve
+// through that mapping. Falls back to `id` itself (unresolved) so callers
+// keep their existing "unknown target" handling for genuinely bad input.
+function resolveTarget(id, frameIds, actorIds, charLocs) {
+  if (frameIds.has(id) || actorIds.has(id)) return id;
+  const loc = charLocs && charLocs.get(id);
+  return loc ? loc.id : id;
+}
+
+// Speaker-prefix resolution shared by plain "<id>: text" lines and the
+// bracket-line tolerance in parseScript: frame id -> actor id -> character
+// name (via charLocs). Returns {frame|actor, text} or null if the label
+// isn't a known target, in which case the string is left alone by the
+// caller (spoken/directed verbatim, prefix and all).
+function matchSpeaker(text, frameIds, actorIds, charLocs) {
+  const m = text.match(/^([A-Za-z][\w-]*):\s*(.*)$/);
+  if (!m) return null;
+  if (frameIds.has(m[1])) return { frame: m[1], text: m[2] };
+  if (actorIds.has(m[1])) return { actor: m[1], text: m[2] };
+  const loc = charLocs && charLocs.get(m[1]);
+  if (loc) return loc.kind === 'frame' ? { frame: loc.id, text: m[2] } : { actor: loc.id, text: m[2] };
+  return null;
+}
+
 /**
  * Parse a screenplay into a cue list.
  *   [wave]                 → action cue
- *   [walk to 70]           → movement (percent of stage width)
+ *   [walk to 70]           → movement (percent of stage width; also accepts
+ *                             left|center|middle|right as 25/50/75)
  *   [look left|right|front], [emote happy], [wait 1.5]
  *   [engine espeak], [voice Samantha], [rate 180]  → speech settings
  *   [layout split]         → frame layout preset
@@ -286,16 +366,27 @@ function parseKV(str) {
  *   [iris out|in 900], [fade out|in 900]  → fullscreen transition
  *                             (ms optional, default 700)
  *   left: Good evening.    → speak cue targeting frame "left" (id must be
- *                             a frame declared earlier in the script)
- *   [left wave]            → direction targeting frame "left"
+ *                             a frame declared earlier in the script); once
+ *                             a character has been framed/placed, its NAME
+ *                             works the same way — `rex: Woof!` resolves to
+ *                             whichever frame/actor rex currently occupies
+ *                             (resolution order: frame id, actor id, name)
+ *   [left: Good evening.]  → same as the line above, tolerated: a bracketed
+ *                             line whose inner text is itself a speaker
+ *                             prefix is unwrapped to a spoken line rather
+ *                             than treated as an unknown direction
+ *   [left wave]            → direction targeting frame "left"; a placed/
+ *                             framed character's name also routes here,
+ *                             e.g. [rex sit] once rex occupies a frame/actor
  *   (wave) Hello!          → action fired concurrently with the line
  *   Hello!                 → speech
  *
  *   [place hoop at 70 scale:0.5]        → place a prop/character actor
- *                             ("at" required; "id:" defaults to the name,
- *                             "scale:" defaults 1 for characters/0.4 for
- *                             props, bare "behind" flag draws it behind the
- *                             frame's primary character)
+ *                             ("at" required — a percent number or
+ *                             left|center|middle|right (25/50/75); "id:"
+ *                             defaults to the name, "scale:" defaults 1 for
+ *                             characters/0.4 for props, bare "behind" flag
+ *                             draws it behind the frame's primary character)
  *   [place rex at 15 scale:0.6 id:sidekick]  → `what` names a folder in
  *                             characters/ → a full rig; otherwise it
  *                             resolves as assets/props/<what>
@@ -311,7 +402,8 @@ function parseKV(str) {
  *   [wear right tophat], [wear right tophat scale:1.2 anchor:head],
  *   [unwear right]           → pin/remove a prop asset at a character's
  *                             named anchor (`target` is a frame id — its
- *                             primary character — or an actor id; anchor
+ *                             primary character — an actor id, or (once
+ *                             framed/placed) a character name; anchor
  *                             defaults to "head")
  *   [music circus]           → cross-fade to assets/music/circus.json
  *                             (a looping JSON note pattern), stage-global
@@ -323,26 +415,45 @@ function parseScript(src) {
   const cues = [];
   const frameIds = new Set(['main']); // tracks declared frame ids as we go
   const actorIds = new Set(); // tracks ids declared by [place ...] as we go
+  // character name -> {kind:'frame'|'actor', id} it currently occupies, so
+  // writers can address characters by name once they've been framed/placed
+  // (`[rex sit]`, `rex: Woof!`, `[wear bo tophat]`); later assignments
+  // override earlier ones. Populated by directionCue's frame/place handling.
+  const charLocs = new Map();
   for (const rawLine of src.split('\n')) {
     const line = rawLine.trim();
     if (!line || line.startsWith('#')) continue;
 
     if (/^(\[[^\]]+\]\s*)+$/.test(line)) {
-      for (const m of line.matchAll(/\[([^\]]+)\]/g)) cues.push(directionCue(m[1], line, frameIds, actorIds));
+      for (const m of line.matchAll(/\[([^\]]+)\]/g)) {
+        const inner = m[1];
+        // Tolerance: `[left: some words]` / `[<name>: words]` is a spoken
+        // line wearing brackets by mistake (common in LLM-authored
+        // screenplays) — unwrap it instead of treating it as an unknown
+        // direction, but only when the label actually resolves.
+        const sp = matchSpeaker(inner, frameIds, actorIds, charLocs);
+        if (sp) {
+          const cue = { type: 'speak', text: sp.text, concurrent: null, source: line };
+          if (sp.frame) cue.frame = sp.frame;
+          if (sp.actor) cue.actor = sp.actor;
+          cues.push(cue);
+        } else {
+          cues.push(directionCue(inner, line, frameIds, actorIds, charLocs));
+        }
+      }
       continue;
     }
 
     let text = line;
     let frame = null;
     let actor = null;
-    const speaker = text.match(/^([A-Za-z][\w-]*):\s*(.*)$/);
-    if (speaker && frameIds.has(speaker[1])) { frame = speaker[1]; text = speaker[2]; }
-    else if (speaker && actorIds.has(speaker[1])) { actor = speaker[1]; text = speaker[2]; }
+    const sp = matchSpeaker(text, frameIds, actorIds, charLocs);
+    if (sp) { frame = sp.frame || null; actor = sp.actor || null; text = sp.text; }
 
     let concurrent = null;
     const inline = text.match(/^\(([^)]+)\)\s*(.*)$/);
     if (inline) {
-      concurrent = directionCue(inline[1], line, frameIds, actorIds);
+      concurrent = directionCue(inline[1], line, frameIds, actorIds, charLocs);
       text = inline[2];
       if (frame) concurrent.frame = frame;
       if (actor) concurrent.actor = actor;
@@ -355,9 +466,10 @@ function parseScript(src) {
   return cues;
 }
 
-function directionCue(body, source, frameIds, actorIds) {
+function directionCue(body, source, frameIds, actorIds, charLocs) {
   frameIds = frameIds || new Set(['main']);
   actorIds = actorIds || new Set();
+  charLocs = charLocs || new Map();
   const parts = body.trim().split(/\s+/);
   const head = parts[0].toLowerCase();
 
@@ -385,6 +497,7 @@ function directionCue(body, source, frameIds, actorIds) {
     if (kv.facing !== undefined) cue.facing = parseInt(kv.facing, 10);
     if (kv.rect) cue.rect = kv.rect.split(',').map(Number);
     frameIds.add(id);
+    if (kv.character) charLocs.set(kv.character, { kind: 'frame', id });
     return cue;
   }
 
@@ -422,13 +535,13 @@ function directionCue(body, source, frameIds, actorIds) {
   }
 
   if (head === 'walk' || head === 'enter' || head === 'exit') {
-    // [walk to 70] [enter from left] [exit right]
+    // [walk to 70] [walk to center] [enter from left] [exit right]
     const arg = parts[parts.length - 1].toLowerCase();
-    let x = parseFloat(arg);
+    // walk's left/right are on-stage position words (25/75); enter/exit's
+    // left/right stay off-stage sides — handled separately below.
+    let x = head === 'walk' ? parsePosWord(arg) : parseFloat(arg);
     if (head === 'enter') x = 50;
-    if (head === 'exit' || arg === 'left' || arg === 'right') {
-      if (isNaN(x)) x = arg === 'left' ? -15 : 115;
-    }
+    else if (head === 'exit' && isNaN(x)) x = arg === 'left' ? -15 : 115;
     const from = parts.includes('from') ? (parts[parts.indexOf('from') + 1] || '') : null;
     return { type: 'walk', x, from, jump: head === 'enter' ? from : null, source };
   }
@@ -451,11 +564,12 @@ function directionCue(body, source, frameIds, actorIds) {
   }
 
   if (head === 'place') {
-    // [place <what> at <x> [id:<id>] [scale:<n>] [behind]]
+    // [place <what> at <x> [id:<id>] [scale:<n>] [behind]] — <x> accepts a
+    // percent number or left|center|middle|right (25/50/75).
     const rest = parts.slice(1);
     const what = rest[0];
     const atIdx = rest.indexOf('at');
-    const x = atIdx >= 0 ? parseFloat(rest[atIdx + 1]) : NaN;
+    const x = atIdx >= 0 ? parsePosWord(rest[atIdx + 1]) : NaN;
     const restStr = parts.slice(1).join(' ');
     const kv = parseKV(restStr);
     const id = kv.id || what;
@@ -463,6 +577,9 @@ function directionCue(body, source, frameIds, actorIds) {
     if (kv.scale !== undefined) cue.scale = parseFloat(kv.scale);
     if (/\bbehind\b/.test(restStr)) cue.behind = true;
     actorIds.add(id);
+    // `what` names a character iff it's a folder in characters/ — track
+    // where it now lives so later `[<what> ...]`/`what: text` addresses it.
+    if (fs.existsSync(path.join(CHARACTERS, what))) charLocs.set(what, { kind: 'actor', id });
     return cue;
   }
 
@@ -473,8 +590,9 @@ function directionCue(body, source, frameIds, actorIds) {
   }
 
   if (head === 'wear') {
-    // [wear <target> <prop> [scale:<n>] [anchor:<name>]]
-    const target = parts[1];
+    // [wear <target> <prop> [scale:<n>] [anchor:<name>]] — target resolves
+    // frame id -> actor id -> character name (see resolveTarget).
+    const target = resolveTarget(parts[1], frameIds, actorIds, charLocs);
     const prop = parts[2];
     const kv = parseKV(parts.slice(3).join(' '));
     const cue = { type: 'wear', target, prop, source };
@@ -484,7 +602,7 @@ function directionCue(body, source, frameIds, actorIds) {
   }
 
   if (head === 'unwear') {
-    const target = parts[1];
+    const target = resolveTarget(parts[1], frameIds, actorIds, charLocs);
     const cue = { type: 'unwear', target, source };
     if (parts[2]) cue.anchor = parts[2];
     return cue;
@@ -501,7 +619,7 @@ function directionCue(body, source, frameIds, actorIds) {
   // Prop-actor directions — only meaningful when the head token that routed
   // here was an actor id (see the actorIds fallback below), e.g.
   // [hoop1 move 40] recurses into directionCue("move 40", ...).
-  if (head === 'move') return { type: 'move', x: parseFloat(parts[1]), source };
+  if (head === 'move') return { type: 'move', x: parsePosWord(parts[1]), source };
   if (head === 'scale') return { type: 'scale', value: parseFloat(parts[1]), source };
   if (head === 'spin') return { type: 'spin', source };
   if (head === 'bounce') return { type: 'bounce', source };
@@ -509,16 +627,28 @@ function directionCue(body, source, frameIds, actorIds) {
   // [<id> <direction...>] — first token is a known frame id: apply the rest
   // of the direction to that frame.
   if (frameIds.has(head) && parts.length > 1) {
-    const sub = directionCue(parts.slice(1).join(' '), source, frameIds, actorIds);
+    const sub = directionCue(parts.slice(1).join(' '), source, frameIds, actorIds, charLocs);
     sub.frame = head;
     return sub;
   }
 
   // Same, for a placed actor id (checked after frame ids, per spec).
   if (actorIds.has(head) && parts.length > 1) {
-    const sub = directionCue(parts.slice(1).join(' '), source, frameIds, actorIds);
+    const sub = directionCue(parts.slice(1).join(' '), source, frameIds, actorIds, charLocs);
     sub.actor = head;
     return sub;
+  }
+
+  // Same, for a character NAME that's been framed/placed (checked after
+  // frame ids and actor ids, per spec) — e.g. [rex sit] once rex occupies a
+  // frame or actor slot; resolves to whichever one it currently occupies.
+  {
+    const loc = charLocs.get(head);
+    if (loc && parts.length > 1) {
+      const sub = directionCue(parts.slice(1).join(' '), source, frameIds, actorIds, charLocs);
+      if (loc.kind === 'frame') sub.frame = loc.id; else sub.actor = loc.id;
+      return sub;
+    }
   }
 
   // [clear] — wipe placed actors/worn props/content tiles/overlays across

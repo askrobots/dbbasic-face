@@ -896,12 +896,34 @@ class Stage {
 
   // `target` is a frame id (its primary character) or an actor id; frame
   // ids resolve first, matching every other target-resolution rule here.
+  // Falls back to a character-name search (see findPuppetByCharacterName)
+  // as belt-and-braces — normally the parser has already resolved a
+  // character name to its frame/actor id by the time a cue gets here.
   resolveWearTarget(targetId) {
     const f = this.frames.get(targetId);
     if (f && f.puppet) return f.puppet;
     for (const cand of this.frames.values()) {
       const a = cand.actors.get(targetId);
       if (a && a.puppet) return a.puppet;
+    }
+    return this.findPuppetByCharacterName(targetId);
+  }
+
+  // Belt-and-braces: find a puppet whose loaded character matches `name`,
+  // checking each frame's primary character first, then its actors. Only
+  // reached when a cue's frame/actor/target id doesn't resolve as an id —
+  // normally the parser has already turned a character name into a real
+  // frame/actor id by the time a cue reaches the client. Kept cheap: two
+  // flat passes over already-loaded puppets, no network/DOM work.
+  findPuppetByCharacterName(name) {
+    if (!name) return null;
+    for (const f of this.frames.values()) {
+      if (f.puppet && f.puppet.characterName === name) return f.puppet;
+    }
+    for (const f of this.frames.values()) {
+      for (const a of f.actors.values()) {
+        if (a.puppet && a.puppet.characterName === name) return a.puppet;
+      }
     }
     return null;
   }
@@ -1346,12 +1368,18 @@ function mainPuppet() {
 
 // Character direction (speak/action/walk/look/view) targets an actor's
 // Puppet when the cue carries `actor`, else the frame's primary — same
-// resolution order the parser applies (frame id, then actor id).
+// resolution order the parser applies (frame id, then actor id, then
+// character name). Belt-and-braces: normally the parser has already
+// resolved a character name to a real frame/actor id, but if a cue arrives
+// with an id that doesn't resolve, fall back to matching it as a character
+// name across every frame's primary and actors.
 function puppetForCue(cue) {
   if (cue.actor) {
     const a = stage.resolveActor(cue);
-    return a ? a.puppet : null;
+    if (a) return a.puppet;
+    return stage.findPuppetByCharacterName(cue.actor);
   }
+  if (cue.frame && !stage.frames.has(cue.frame)) return stage.findPuppetByCharacterName(cue.frame);
   return stage.forFrame(cue);
 }
 

@@ -47,11 +47,14 @@ OPENAI_URL = "https://api.openai.com/v1/chat/completions"
 GRAMMAR = """SCREENPLAY GRAMMAR (plain text file, one or more directions per bracket line)
   # comment                          ignored
   Hello there.                       plain line = spoken by the main/current character
-  left: Hi!                          "id: text" = spoken by that frame/actor id
+  left: Hi!                          "id: text" = spoken by that frame/actor id (see NAMES below)
   (wave) Hi!                         (action) prefix = fires an action while the line is spoken
   [wave]                             a line of one-or-more space-joined [direction] groups
 Directions (inside [...]):
-  walk to N | enter from left|right | exit left|right   move/enter/exit (N = % of stage width)
+  walk to N | enter from left|right | exit left|right   move/enter/exit (N = % of stage width;
+                                       N also accepts left|center|middle|right as 25/50/75 —
+                                       NOTE: for enter/exit specifically, left|right mean
+                                       off-stage sides, not the 25/75 on-stage positions)
   wait N                              pause N seconds
   look left|right|up|down|front       gaze direction
   view face|body                      camera framing (close-up / full stage)
@@ -70,16 +73,25 @@ Directions (inside [...]):
   lower-third "Title" "Subtitle" [hold:<ms>]   broadcast caption bar (default hold 6000ms)
   lower-third clear                   remove it
   place <what> at <x> [id:<id>] [scale:<n>] [behind]   add a prop or character actor
+                                       (<x> also accepts left|center|middle|right as 25/50/75)
   remove <id>                         remove a placed actor
   wear <target> <prop> [scale:<n>] [anchor:<name>]   pin a prop to a character/actor (anchor default head)
   unwear <target> [anchor]
   music <id> | music off              background loop
   sfx <id>                            one-shot sound effect
   clear                               wipe placed actors/worn props/content/overlays
-  [<frame-or-actor-id> <direction>]   route any direction above at a frame/actor, e.g. [left wave] [hoop1 spin]
-Rules: multi-character scenes need [layout split] + [frame left character:X]
-[frame right character:Y] BEFORE using "left:"/"right:" as speaker prefixes —
-a bare character name is never itself a valid speaker prefix.
+  [<frame-or-actor-id-or-name> <direction>]   route any direction above at a frame, actor,
+                                       or character NAME, e.g. [left wave] [hoop1 spin] [rex sit]
+NAMES: once a character has been framed ([frame left character:rex]) or placed
+([place rex at 30]), you may address it directly BY NAME instead of the frame/
+actor id — [rex sit], rex: Woof!, [wear rex tophat] all resolve to whichever
+frame/actor rex currently occupies. Resolution order everywhere (head token of
+a [direction], a speaker prefix, and wear/unwear targets) is: frame id, then
+actor id, then character name. A character name is NOT usable until it has
+been framed or placed at least once earlier in the script.
+Speaker lines are written as "name: text" on their own line — NEVER wrap a
+speaker line in brackets like "[name: text]" (it is tolerated by the parser
+as a fallback, but always prefer the unbracketed form).
 """
 
 _LINE_BRACKETS = re.compile(r"^(\[[^\]]+\]\s*)+$")
@@ -270,7 +282,11 @@ def _lint(script, cap):
             if len(rest) < 2:
                 errors.append(f"line {lineno}: [wear] needs a target and a prop"); return
             target, prop = rest[0], rest[1]
-            if target not in frame_ids and target not in actor_ids:
+            # target resolves frame id -> actor id -> character name, same
+            # order the real parser applies (a name works once framed/placed
+            # earlier in the script; the lint doesn't track exactly where,
+            # it just trusts any known cast name).
+            if target not in frame_ids and target not in actor_ids and target not in cast_names:
                 errors.append(f"line {lineno}: unknown wear target '{target}'")
             if prop not in prop_ids:
                 errors.append(f"line {lineno}: unknown prop '{prop}' in [wear]")
@@ -278,12 +294,14 @@ def _lint(script, cap):
         if head == "unwear":
             if not rest:
                 errors.append(f"line {lineno}: [unwear] needs a target"); return
-            if rest[0] not in frame_ids and rest[0] not in actor_ids:
+            if rest[0] not in frame_ids and rest[0] not in actor_ids and rest[0] not in cast_names:
                 errors.append(f"line {lineno}: unknown unwear target '{rest[0]}'")
             return
         if head in _SIMPLE_DIRECTIONS:
             return
-        if (head in frame_ids or head in actor_ids) and rest:
+        # A name-addressed direction ([rex sit]) routes the same way a
+        # frame/actor id does, once rex is a known cast member.
+        if (head in frame_ids or head in actor_ids or head in cast_names) and rest:
             check(rest_str, lineno)
             return
         if head in ("move", "scale", "spin", "bounce"):
@@ -300,7 +318,15 @@ def _lint(script, cap):
             continue
         if _LINE_BRACKETS.match(line):
             for m in _BRACKET.finditer(line):
-                check(m.group(1), lineno)
+                inner = m.group(1).strip()
+                # Tolerance mirrors the parser: "[label: text]" is a spoken
+                # line wearing brackets by mistake, not a direction, as long
+                # as the label resolves to a frame/actor id or a known cast
+                # name — skip direction-validating it.
+                sm = _SPEAKER.match(inner)
+                if sm and (sm.group(1) in frame_ids or sm.group(1) in actor_ids or sm.group(1) in cast_names):
+                    continue
+                check(inner, lineno)
             continue
         if "[" in line or "]" in line:
             errors.append(f"line {lineno}: stray brackets outside a direction-only line: {line[:60]}")
@@ -309,12 +335,10 @@ def _lint(script, cap):
         m = _SPEAKER.match(text)
         if m:
             label = m.group(1)
-            if label in frame_ids or label in actor_ids:
-                text = m.group(2)
-            elif label in cast_names:
-                errors.append(
-                    f"line {lineno}: '{label}:' used as speaker but not set up via "
-                    f"[frame ... character:{label}] or [place {label} ...]")
+            # A frame/actor id, or (once framed/placed) a character name,
+            # is a valid speaker prefix — mirrors the parser's charLocs
+            # resolution (frame id -> actor id -> character name).
+            if label in frame_ids or label in actor_ids or label in cast_names:
                 text = m.group(2)
         im = _INLINE.match(text)
         if im:
@@ -350,6 +374,11 @@ def _compose(prompt, cap):
         "- Keep spoken lines short and performable (under ~12 words).\n"
         "- Multi-character scenes need [layout split] + [frame left character:X]"
         " [frame right character:Y] with left:/right: speaker prefixes.\n"
+        "- Once a character is framed or placed, you may address it by name directly"
+        " ([rex sit], rex: Woof!, [wear rex tophat]) instead of the frame/actor id.\n"
+        "- Positions accept left|center|middle|right as well as 0-99 percent numbers.\n"
+        "- Write speaker lines as `name: text` on their own line, never wrapped in"
+        " brackets like `[name: text]`.\n"
         "- Output ONLY the screenplay text: no markdown fences, no explanation."
     )
     messages = [{"role": "system", "content": system}, {"role": "user", "content": prompt}]
