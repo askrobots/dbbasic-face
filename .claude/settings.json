@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --check *)",
+      "Bash(python3 -m json.tool *)",
+      "mcp__askrobots__get_project_feed",
+      "mcp__askrobots__global_search",
+      "mcp__askrobots__get_task"
+    ]
+  }
+}
