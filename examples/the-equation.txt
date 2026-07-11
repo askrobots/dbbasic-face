@@ -1,0 +1,31 @@
+# The Equation — an homage to a certain hotel commercial. Punchline ours.
+[captions on]
+[layout single]
+[frame main character:pip bg:newsroom view:body]
+[fade in 800]
+[music sneak]
+[show text:"THE UNSOLVABLE EQUATION — 40 YEARS, NO PROOF"]
+[wait 1.2]
+[walk to 60]
+(nod) Hmm.
+[wait 0.8]
+[show text:"x = 42.  Q.E.D."]
+[sfx chime]
+[music off]
+[layout split]
+[frame left character:gus bg:newsroom view:face]
+[frame right character:pip bg:newsroom view:body]
+gus: (surprised) You... you SOLVED it. Forty years! The finest minds in the world!
+gus: How did you do it, Professor?
+pip: Oh, I'm not a professor.
+pip: I just came in to water the plants.
+[place plant at 75 scale:0.3]
+gus: Then... HOW?
+pip: (happy) But we did use AI from Anthropic and OpenAI last night.
+[gus adjust]
+gus: ...Of course you did.
+[sfx tada]
+[music fanfare]
+[lower-third "BUILD SMART" "a puppet stage + a couple of very good models"]
+[wait 2.5]
+[iris out 1200]
