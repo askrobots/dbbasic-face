@@ -31,9 +31,29 @@ POST {"review_character": "<name>", "actions": [optional subset]}
   screenshots per action, so the action cap stays at 5. Every one of those
   shots is a FRESH Firefox page (a fresh page always boots the module's
   default character), so each `_shoot_at_phase` call gets a `prep_fn` that
-  POSTs {"type":"character","name":<name>} at nav+1.5s -- well before the
-  nav+3.0s action cue -- so the audited character (not the default) is
-  actually on stage for every rest shot and every filmstrip frame.
+  POSTs {"type":"character","name":<name>} at nav+1.5s, then ~200ms later
+  (still well before the nav+3.0s action cue) POSTs {"type":"view",
+  "mode":"face"|"body"} to frame the camera for THAT action before its cue
+  fires -- so the audited character (not the default) is actually on stage,
+  correctly framed, for every rest shot and every filmstrip frame. Framing
+  is chosen per action from its manifest tracks: actions whose tracks are
+  ALL head-region targets (substring match on head/brow/eye/pupil/glasses/
+  mouth/cheek/iris against each track's `target` selector), or whose name is
+  one of nod/shake/happy/sad/surprised, get FACE (close-up on the head) --
+  full-stage wide shots make head-scale motion like a nod ~2 visible pixels,
+  which a vision model correctly (but uselessly) reads as static. Every
+  other action, and the rest shot, gets BODY (full stage). The chosen view
+  per action is reported back as "views". Every captured frame (rest still
+  and every filmstrip frame) is also cropped via ffmpeg to the stage's own
+  940px-wide viewport region before encoding/tiling, dropping the app's
+  ~340px control panel (right ~27% of the 1280px window) so the model never
+  spends attention/tokens on UI chrome -- filmstrip tiling crops each input
+  before hstacking; the rest shot is cropped standalone. A shot that fails
+  (screenshot timeout, navigation not detected, etc) is retried once; if it
+  still fails, that action is reported explicitly as
+  "<action>": {"capture": "failed"} under a top-level "failures" key rather
+  than silently vanishing from the results (previously a single flaky shot
+  mid-loop would silently truncate every action after it).
 GET -> {"status":"ok","usage": {...}}
 
 Screenshot timing: Firefox startup jitters 1-3s between spawn and actual
@@ -59,8 +79,9 @@ for a cheaper writer/critic or gpt-5.4/gpt-5.5 for a stronger one),
 OPENAI_API_KEY or OPENAI_KEY_FILE (path to a .env-style file with an
 OPENAI_API_KEY=... line). Key is never logged or returned. Zero third-party
 deps: urllib.request against api.openai.com, subprocess for headless Firefox
-and for ffmpeg (composites review/audition frames into single filmstrip
-images; falls back to sending un-tiled frames if ffmpeg tiling fails).
+and for ffmpeg (crops the app's control panel out of every frame, and
+composites review/audition frames into single filmstrip images; falls back
+to sending un-tiled, uncropped frames if ffmpeg tiling fails).
 Character/asset lists are fetched live from PUPPET_BASE and cached
 in-module for 60s so the model can't invent a name. Firefox/screenshot/
 ffmpeg failures degrade review/audition (skip vision, or fall back to
@@ -467,6 +488,13 @@ _BOOT_DELAY = 2.2  # seconds (fallback-only: fixed sleep after spawn, pre-nav-an
 _POLL_INTERVAL = 0.1  # seconds between /api/last-shot polls
 _POLL_TIMEOUT = 15.0  # seconds to wait for a fresh /api/last-shot before giving up
 _PHASES = (0.15, 0.40, 0.65, 0.90)  # filmstrip frame offsets across an action
+# The stage window is captured at 1280px wide, but the app's control panel
+# occupies a fixed-width 340px column on the right (see stage.py's
+# `grid-template-columns: 1fr 340px`); the actual stage/puppet area is the
+# left 1280-340 = 940px. Every captured frame is cropped to this region
+# before it's sent to vision, so the model never spends attention/tokens on
+# UI chrome that has nothing to do with the puppet's performance.
+_STAGE_CROP_W = 940
 
 def _last_shot_t():
     """GET {BASE}/api/last-shot -> the server-clock ms of the most recent
@@ -563,25 +591,42 @@ def _data_uri_from_file(path):
         raw = fh.read()
     return "data:image/png;base64," + base64.b64encode(raw).decode()
 
-def _ffmpeg_hstack(frame_paths, out_path, width=1536):
-    """Composite N same-size screenshots into one horizontal filmstrip,
-    downscaled to `width` so detail survives OpenAI's image tiling without
-    waste. For 4 frames this runs:
+def _ffmpeg_hstack(frame_paths, out_path, width=1536, crop_width=_STAGE_CROP_W):
+    """Crop each input to the stage area (drop the app's control-panel
+    column, see _STAGE_CROP_W) and composite the N cropped screenshots into
+    one horizontal filmstrip, downscaled to `width` so detail survives
+    OpenAI's image tiling without waste. For 4 frames this runs:
       ffmpeg -y -i f1.png -i f2.png -i f3.png -i f4.png -filter_complex
-        "[0][1][2][3]hstack=inputs=4,scale=1536:-1" strip.png
+        "[0]crop=940:ih:0:0[c0];[1]crop=940:ih:0:0[c1];
+         [2]crop=940:ih:0:0[c2];[3]crop=940:ih:0:0[c3];
+         [c0][c1][c2][c3]hstack=inputs=4,scale=1536:-1" strip.png
     Returns False (never raises) on any failure so callers can fall back to
-    sending the individual frames."""
+    sending the individual (uncropped) frames."""
     n = len(frame_paths)
     if n < 2:
         return False
     inputs = []
     for p in frame_paths:
         inputs += ["-i", p]
-    refs = "".join(f"[{i}]" for i in range(n))
-    filt = f"{refs}hstack=inputs={n},scale={width}:-1"
+    crops = ";".join(f"[{i}]crop={crop_width}:ih:0:0[c{i}]" for i in range(n))
+    refs = "".join(f"[c{i}]" for i in range(n))
+    filt = f"{crops};{refs}hstack=inputs={n},scale={width}:-1"
     cmd = [FFMPEG, "-y"] + inputs + ["-filter_complex", filt, out_path]
     try:
         subprocess.run(cmd, capture_output=True, timeout=30, check=True)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+        return False
+    return os.path.exists(out_path) and os.path.getsize(out_path) > 0
+
+def _ffmpeg_crop_single(in_path, out_path, crop_width=_STAGE_CROP_W):
+    """Crop one screenshot to the stage area (see _STAGE_CROP_W), same crop
+    _ffmpeg_hstack applies per-input before tiling -- used for the rest shot,
+    which is a single image sent to vision on its own, never tiled. Returns
+    False (never raises) on any failure so the caller can fall back to the
+    uncropped original."""
+    cmd = [FFMPEG, "-y", "-i", in_path, "-vf", f"crop={crop_width}:ih:0:0", out_path]
+    try:
+        subprocess.run(cmd, capture_output=True, timeout=15, check=True)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
         return False
     return os.path.exists(out_path) and os.path.getsize(out_path) > 0
@@ -594,17 +639,25 @@ def _rest_shot(name, prep_fn=None):
     (3s) gives the stage plenty of time to settle. `prep_fn`, if given,
     fires at nav+_PREP_DELAY to load `name` onto this fresh page first
     (every freshly spawned page otherwise boots the module's default
-    character, not the audited one)."""
+    character, not the audited one). Cropped to the stage area (see
+    _STAGE_CROP_W) before being base64-encoded, so the model never sees the
+    app's control panel; falls back to the uncropped shot if the ffmpeg crop
+    itself fails."""
     fd, path = tempfile.mkstemp(suffix=".png")
     os.close(fd)
+    fd2, cropped_path = tempfile.mkstemp(suffix=".png")
+    os.close(fd2)
     try:
         _shoot_at_phase(None, 0, path, timeout=_CUE_DELAY + 20, prep_fn=prep_fn)
+        if _ffmpeg_crop_single(path, cropped_path):
+            return _data_uri_from_file(cropped_path)
         return _data_uri_from_file(path)
     finally:
-        try:
-            os.remove(path)
-        except OSError:
-            pass
+        for p in (path, cropped_path):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
 
 def _action_duration_ms(manifest, action):
     """Max track duration (ms) for an action in a character's manifest.json,
@@ -755,6 +808,42 @@ def _review_show(script, main_char):
 
 # ---------------------------------------------------------------- audition
 
+# Substring match (lowercased) against a track's `target` CSS selector, e.g.
+# "#head", "#brow-left", "#eyes", ".iris", "#mouths", "#glasses-A".
+_HEAD_TARGET_SUBSTRINGS = ("head", "brow", "eye", "pupil", "glasses", "mouth", "cheek", "iris")
+# Named expression/head actions get FACE view regardless of their tracks --
+# these are exactly the ones whose motion is unreadable at full-stage scale.
+_FACE_ACTION_NAMES = {"nod", "shake", "happy", "sad", "surprised"}
+
+def _classify_action_view(manifest, action):
+    """FACE (camera zoom to the character's head) if the action's name is one
+    of _FACE_ACTION_NAMES, or if it has at least one track and EVERY track's
+    `target` selector substring-matches a head-region part
+    (_HEAD_TARGET_SUBSTRINGS). Otherwise BODY (full stage). Wide-shot audits
+    of head-scale motion (a nod, a shake) move ~2 visible pixels at
+    1280px-stage scale -- a vision model correctly, but uselessly, calls
+    that static, hence the close-up."""
+    if action in _FACE_ACTION_NAMES:
+        return "face"
+    tracks = ((manifest.get("actions") or {}).get(action) or {}).get("tracks") or []
+    targets = [str(t.get("target") or "") for t in tracks if t.get("target")]
+    if targets and all(any(sub in tgt.lower() for sub in _HEAD_TARGET_SUBSTRINGS) for tgt in targets):
+        return "face"
+    return "body"
+
+def _view_prep_fn(name, view):
+    """prep_fn for _shoot_at_phase: POSTs the character cue, then ~200ms
+    later POSTs a camera cue ({"type":"view","mode":<view>}) so the stage is
+    framed correctly before the action's cue fires. Both POSTs fire inside
+    the single prep_fn invocation at nav+_PREP_DELAY (1.5s), well ahead of
+    the nav+_CUE_DELAY (3.0s) action cue, leaving ~1.3s of slack for two
+    fast local POSTs plus the 200ms gap between them."""
+    def prep():
+        _http_post(f"{BASE}/api/cue", {"type": "character", "name": name})
+        time.sleep(0.2)
+        _http_post(f"{BASE}/api/cue", {"type": "view", "mode": view})
+    return prep
+
 def _audition(request):
     name = str(request.get("review_character", "")).strip()
     if not name:
@@ -777,53 +866,106 @@ def _audition(request):
     except Exception:
         manifest = {}
 
-    images = {}  # label -> (list of data-uris, strip_ok)
+    images = {}  # label -> (list of data-uris, strip_ok) on success, {"capture": "failed"} on failure
+    views = {"rest": "body"}
     strip_ok = True
-    # Every shot below is a FRESH Firefox page, and a fresh stage page always
-    # boots the module's default character -- so prep_fn (loading `name`) is
-    # passed into EVERY _shoot_at_phase call (via _rest_shot/_action_filmstrip)
-    # rather than posted once up front, which only affected pages that
-    # happened to be open at that moment.
-    prep_fn = lambda: _http_post(f"{BASE}/api/cue", {"type": "character", "name": name})  # noqa: E731
-    try:
-        images["rest"] = ([_rest_shot(name, prep_fn=prep_fn)], True)
-        for action in actions:
-            duration_ms = _action_duration_ms(manifest, action)
-            frames, ok = _action_filmstrip(name, action, duration_ms, prep_fn=prep_fn)
-            images[action] = (frames, ok)
-            strip_ok = strip_ok and ok
-    except Exception as exc:
-        if not images:
-            return {"status": "error", "error": f"unavailable: {str(exc)[:200]}"}
-        _logger.warning("audition shot failed partway", error=str(exc)[:200])
 
-    order = ["rest"] + [a for a in actions if a in images]
+    # Every shot below is a FRESH Firefox page, and a fresh stage page always
+    # boots the module's default character -- so prep_fn (loading `name`,
+    # then framing the camera) is passed into EVERY _shoot_at_phase call
+    # (via _rest_shot/_action_filmstrip) rather than posted once up front,
+    # which only affected pages that happened to be open at that moment.
+    #
+    # Each capture below gets its own try/except with one retry, instead of
+    # one try wrapping the whole actions loop. The single-try version had a
+    # silent-drop bug: any exception raised out of _shoot_at_phase (nav not
+    # detected within _POLL_TIMEOUT, screenshot not produced, firefox
+    # hanging past its subprocess timeout -- none of which _action_filmstrip
+    # catches, it only cleans up temp files on the way out) propagated past
+    # the *entire* `for action in actions` loop to the outer except, which
+    # just logged a warning and returned whatever had accumulated in
+    # `images` so far -- silently truncating every action from the failure
+    # point on (root cause of a 5-action audition for 'bo' coming back with
+    # images_captured == ['rest','wave','shake']: the 4th action's shot
+    # raised and 'nod'/whatever came after it never even got attempted).
+    # Now a failed capture is retried once, and if it still fails it's
+    # recorded explicitly instead of vanishing, and the loop continues.
+    rest_prep = _view_prep_fn(name, "body")
+    try:
+        images["rest"] = ([_rest_shot(name, prep_fn=rest_prep)], True)
+    except Exception as exc:
+        _logger.warning("audition rest shot failed, retrying once", error=str(exc)[:200])
+        try:
+            images["rest"] = ([_rest_shot(name, prep_fn=rest_prep)], True)
+        except Exception as exc2:
+            return {"status": "error", "error": f"unavailable: {str(exc2)[:200]}"}
+
+    for action in actions:
+        view = _classify_action_view(manifest, action)
+        views[action] = view
+        action_prep = _view_prep_fn(name, view)
+        duration_ms = _action_duration_ms(manifest, action)
+        try:
+            frames, ok = _action_filmstrip(name, action, duration_ms, prep_fn=action_prep)
+        except Exception as exc:
+            _logger.warning("audition action capture failed, retrying once",
+                             action=action, error=str(exc)[:200])
+            try:
+                frames, ok = _action_filmstrip(name, action, duration_ms, prep_fn=action_prep)
+            except Exception as exc2:
+                _logger.warning("audition action capture failed twice, recording as failed",
+                                 action=action, error=str(exc2)[:200])
+                images[action] = {"capture": "failed"}
+                continue
+        images[action] = (frames, ok)
+        strip_ok = strip_ok and ok
+
+    order = ["rest"] + actions  # every requested label, success or failure -- nothing silently dropped
+    failures = {label: entry for label, entry in images.items()
+                if isinstance(entry, dict) and entry.get("capture") == "failed"}
+
     content = [{"type": "text", "text":
                 f"Character: {name}. Judging {len(order)} labeled images of a 2D cutout puppet "
-                "rig: a rest-pose still, plus one motion image per action."}]
+                "rig: a rest-pose still, plus one motion image per action. Head-motion actions "
+                "(nod/shake/expressions, or any action whose tracks only move head-region parts) "
+                "are shot in FACE close-up so small head motion is actually visible; everything "
+                "else is a full-body shot -- each image's note below says which."}]
     for label in order:
-        frames, ok = images[label]
+        entry = images.get(label)
+        if isinstance(entry, dict) and entry.get("capture") == "failed":
+            content.append({"type": "text", "text":
+                             f"[{label}] (capture failed after retry -- no image available, "
+                             "do not judge this action)"})
+            continue
+        frames, ok = entry
+        view = views.get(label, "body")
+        view_desc = "shot in face close-up" if view == "face" else "full-body shot"
         if label == "rest":
-            note = " (rest pose, single still)"
+            note = f" (rest pose, single still, {view_desc})"
         elif ok:
-            note = (" (filmstrip: 4 frames left→right at ~15/40/65/90% of the action's "
-                     "motion -- judge the MOTION: does it read as the named action? is the "
-                     "arc smooth across the strip? clipping at any phase? silhouette clarity "
-                     "throughout?)")
+            note = (f" (filmstrip: 4 frames left→right at ~15/40/65/90% of the action's "
+                     f"motion, {view_desc} -- judge the MOTION: does it read as the named "
+                     "action? is the arc smooth across the strip? clipping at any phase? "
+                     "silhouette clarity throughout?)")
         else:
-            note = " (ffmpeg tiling unavailable -- single mid-action frame only, no motion arc)"
+            note = f" (ffmpeg tiling unavailable -- single mid-action frame only, {view_desc}, no motion arc)"
         content.append({"type": "text", "text": f"[{label}]" + note})
         for img in frames:
             content.append({"type": "image_url", "image_url": {"url": img}})
     system = (
         "You are an animation supervisor reviewing a 2D cutout puppet rig. The rest-pose "
-        "image is a single still. Each action image is normally a filmstrip of 4 frames "
-        "left→right at ~15/40/65/90% of that action's duration -- judge the MOTION across "
-        "the strip, not just a single pose: does it read as the named action? is the arc "
-        "smooth across the four phases? any clipping/overlap at any phase? is the silhouette "
-        "clear throughout? (A handful of actions may arrive as a single mid-action frame "
-        "instead, when filmstrip tiling wasn't available -- judge those as a static pose.) "
-        "Then give overall notes on the rig. Return strict json only, no prose: "
+        "image is a single still, full-body shot. Each action image is normally a filmstrip "
+        "of 4 frames left→right at ~15/40/65/90% of that action's duration -- judge the "
+        "MOTION across the strip, not just a single pose: does it read as the named action? "
+        "is the arc smooth across the four phases? any clipping/overlap at any phase? is the "
+        "silhouette clear throughout? Head-motion actions (nod, shake, expressions, or any "
+        "action whose tracks only move head-region parts) are shot in FACE close-up instead "
+        "of full-stage -- the motion may be just a few pixels of head tilt/translation at "
+        "full-stage scale, so trust the close-up framing rather than expecting stage-wide "
+        "movement. (A handful of actions may arrive as a single mid-action frame instead, "
+        "when filmstrip tiling wasn't available -- judge those as a static pose. A handful "
+        "may also be missing entirely, noted as a capture failure -- do not invent a verdict "
+        "for those.) Then give overall notes on the rig. Return strict json only, no prose: "
         '{"actions":{"<name>":{"reads":true|false,"issues":["..."]}},'
         '"overall":["..."],"suggestions":["concrete manifest keyframe or SVG tweaks"]}.'
     )
@@ -836,8 +978,11 @@ def _audition(request):
         verdict = json.loads(raw)
     except json.JSONDecodeError:
         return {"status": "error", "error": "vision verdict was not valid json", "raw": raw[:500]}
-    return {"status": "ok", "character": name, "images_captured": order, "strip": strip_ok,
-            "verdict": verdict}
+    result = {"status": "ok", "character": name, "images_captured": order, "views": views,
+              "strip": strip_ok, "verdict": verdict}
+    if failures:
+        result["failures"] = failures
+    return result
 
 # ---------------------------------------------------------------- dispatch
 

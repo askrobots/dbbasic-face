@@ -85,19 +85,51 @@
           "duration": 1200,
           "keyframes": [
             {
+              "transform": "translateY(0) rotate(0deg)"
+            },
+            {
+              "transform": "translateY(18px) rotate(9deg)",
+              "offset": 0.15
+            },
+            {
+              "transform": "translateY(-6px) rotate(-5deg)",
+              "offset": 0.4
+            },
+            {
+              "transform": "translateY(18px) rotate(9deg)",
+              "offset": 0.65
+            },
+            {
+              "transform": "translateY(-6px) rotate(-5deg)",
+              "offset": 0.9
+            },
+            {
+              "transform": "translateY(0) rotate(0deg)"
+            }
+          ]
+        },
+        {
+          "target": "#torso",
+          "duration": 1200,
+          "keyframes": [
+            {
               "transform": "translateY(0)"
             },
             {
-              "transform": "translateY(6px) rotate(2deg)",
-              "offset": 0.25
+              "transform": "translateY(-3px)",
+              "offset": 0.15
             },
             {
-              "transform": "translateY(0)",
-              "offset": 0.5
+              "transform": "translateY(1px)",
+              "offset": 0.4
             },
             {
-              "transform": "translateY(6px) rotate(2deg)",
-              "offset": 0.75
+              "transform": "translateY(-3px)",
+              "offset": 0.65
+            },
+            {
+              "transform": "translateY(1px)",
+              "offset": 0.9
             },
             {
               "transform": "translateY(0)"
@@ -113,22 +145,54 @@
           "duration": 1200,
           "keyframes": [
             {
-              "transform": "translateX(0)"
+              "transform": "translateX(0) rotate(0deg)"
             },
             {
-              "transform": "translateX(-6px) rotate(-2deg)",
-              "offset": 0.2
+              "transform": "translateX(-16px) rotate(-11deg)",
+              "offset": 0.15
             },
             {
-              "transform": "translateX(6px) rotate(2deg)",
-              "offset": 0.45
+              "transform": "translateX(16px) rotate(11deg)",
+              "offset": 0.4
             },
             {
-              "transform": "translateX(-6px) rotate(-2deg)",
-              "offset": 0.7
+              "transform": "translateX(-16px) rotate(-11deg)",
+              "offset": 0.65
             },
             {
-              "transform": "translateX(0)"
+              "transform": "translateX(16px) rotate(11deg)",
+              "offset": 0.9
+            },
+            {
+              "transform": "translateX(0) rotate(0deg)"
+            }
+          ]
+        },
+        {
+          "target": "#torso",
+          "duration": 1200,
+          "keyframes": [
+            {
+              "transform": "rotate(0deg)"
+            },
+            {
+              "transform": "rotate(3deg)",
+              "offset": 0.15
+            },
+            {
+              "transform": "rotate(-3deg)",
+              "offset": 0.4
+            },
+            {
+              "transform": "rotate(3deg)",
+              "offset": 0.65
+            },
+            {
+              "transform": "rotate(-3deg)",
+              "offset": 0.9
+            },
+            {
+              "transform": "rotate(0deg)"
             }
           ]
         }
@@ -138,17 +202,17 @@
       "tracks": [
         {
           "target": "#arm-left",
-          "duration": 1100,
+          "duration": 1300,
           "keyframes": [
             {
               "transform": "translateY(0) rotate(0deg)"
             },
             {
-              "transform": "translateY(-7px) rotate(9deg)",
-              "offset": 0.35
+              "transform": "translateY(-14px) rotate(24deg)",
+              "offset": 0.3
             },
             {
-              "transform": "translateY(-7px) rotate(9deg)",
+              "transform": "translateY(-14px) rotate(24deg)",
               "offset": 0.65
             },
             {
@@ -158,17 +222,17 @@
         },
         {
           "target": "#arm-right",
-          "duration": 1100,
+          "duration": 1300,
           "keyframes": [
             {
               "transform": "translateY(0) rotate(0deg)"
             },
             {
-              "transform": "translateY(-7px) rotate(-9deg)",
-              "offset": 0.35
+              "transform": "translateY(-14px) rotate(-24deg)",
+              "offset": 0.3
             },
             {
-              "transform": "translateY(-7px) rotate(-9deg)",
+              "transform": "translateY(-14px) rotate(-24deg)",
               "offset": 0.65
             },
             {
@@ -177,18 +241,38 @@
           ]
         },
         {
+          "target": "#torso",
+          "duration": 1300,
+          "keyframes": [
+            {
+              "transform": "translateY(0)"
+            },
+            {
+              "transform": "translateY(-9px)",
+              "offset": 0.3
+            },
+            {
+              "transform": "translateY(-9px)",
+              "offset": 0.65
+            },
+            {
+              "transform": "translateY(0)"
+            }
+          ]
+        },
+        {
           "target": "#head",
-          "duration": 1100,
+          "duration": 1300,
           "keyframes": [
             {
               "transform": "rotate(0deg)"
             },
             {
-              "transform": "rotate(-4deg)",
-              "offset": 0.35
+              "transform": "rotate(-8deg)",
+              "offset": 0.3
             },
             {
-              "transform": "rotate(-4deg)",
+              "transform": "rotate(-8deg)",
               "offset": 0.65
             },
             {

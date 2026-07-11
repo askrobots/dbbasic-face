@@ -64,7 +64,7 @@
 
       <!-- Nine mouth shapes drawn as muzzle/jaw poses: exactly one visible at a time -->
       <g id="mouths">
-        <g id="mouth-X">
+        <g id="mouth-X" style="transform-box:fill-box;transform-origin:50% 50%">
           <path d="M251,112 Q263,116 275,112" stroke="#1a1a1a" stroke-width="3" fill="none" stroke-linecap="round"/>
         </g>
         <g id="mouth-A">

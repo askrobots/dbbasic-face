@@ -93,42 +93,42 @@
       "tracks": [
         {
           "target": "#body",
-          "duration": 1000,
+          "duration": 1300,
           "easing": "ease-in-out",
           "keyframes": [
             { "transform": "rotate(0deg) translateY(0)" },
-            { "transform": "rotate(-10deg) translateY(6px)", "offset": 0.4 },
-            { "transform": "rotate(-10deg) translateY(6px)", "offset": 0.6 },
+            { "transform": "rotate(-22deg) translateY(18px)", "offset": 0.3 },
+            { "transform": "rotate(-22deg) translateY(18px)", "offset": 0.9 },
             { "transform": "rotate(0deg) translateY(0)" }
           ]
         },
         {
           "target": "#leg-back-left",
-          "duration": 1000,
+          "duration": 1300,
           "keyframes": [
-            { "transform": "rotate(0deg)" },
-            { "transform": "rotate(35deg)", "offset": 0.4 },
-            { "transform": "rotate(35deg)", "offset": 0.6 },
-            { "transform": "rotate(0deg)" }
+            { "transform": "rotate(0deg) translateY(0)" },
+            { "transform": "rotate(100deg) translateY(-20px)", "offset": 0.3 },
+            { "transform": "rotate(100deg) translateY(-20px)", "offset": 0.9 },
+            { "transform": "rotate(0deg) translateY(0)" }
           ]
         },
         {
           "target": "#leg-back-right",
-          "duration": 1000,
+          "duration": 1300,
           "keyframes": [
-            { "transform": "rotate(0deg)" },
-            { "transform": "rotate(-35deg)", "offset": 0.4 },
-            { "transform": "rotate(-35deg)", "offset": 0.6 },
-            { "transform": "rotate(0deg)" }
+            { "transform": "rotate(0deg) translateY(0)" },
+            { "transform": "rotate(-100deg) translateY(-20px)", "offset": 0.3 },
+            { "transform": "rotate(-100deg) translateY(-20px)", "offset": 0.9 },
+            { "transform": "rotate(0deg) translateY(0)" }
           ]
         },
         {
           "target": "#tail",
-          "duration": 1000,
+          "duration": 1300,
           "keyframes": [
             { "transform": "rotate(0deg)" },
-            { "transform": "rotate(-15deg)", "offset": 0.4 },
-            { "transform": "rotate(-15deg)", "offset": 0.6 },
+            { "transform": "rotate(-18deg)", "offset": 0.3 },
+            { "transform": "rotate(-18deg)", "offset": 0.9 },
             { "transform": "rotate(0deg)" }
           ]
         }
@@ -137,30 +137,74 @@
     "beg": {
       "tracks": [
         {
-          "target": "#leg-front-left",
-          "duration": 750,
+          "target": "#body",
+          "duration": 1300,
+          "easing": "ease-in-out",
           "keyframes": [
-            { "transform": "rotate(0deg)" },
-            { "transform": "rotate(-70deg)", "offset": 0.5 },
-            { "transform": "rotate(0deg)" }
+            { "transform": "rotate(0deg) translateY(0)" },
+            { "transform": "rotate(-28deg) translateY(-8px)", "offset": 0.3 },
+            { "transform": "rotate(-28deg) translateY(-8px)", "offset": 0.9 },
+            { "transform": "rotate(0deg) translateY(0)" }
+          ]
+        },
+        {
+          "target": "#leg-back-left",
+          "duration": 1300,
+          "keyframes": [
+            { "transform": "rotate(0deg) translateY(0)" },
+            { "transform": "rotate(100deg) translateY(-20px)", "offset": 0.3 },
+            { "transform": "rotate(100deg) translateY(-20px)", "offset": 0.9 },
+            { "transform": "rotate(0deg) translateY(0)" }
+          ]
+        },
+        {
+          "target": "#leg-back-right",
+          "duration": 1300,
+          "keyframes": [
+            { "transform": "rotate(0deg) translateY(0)" },
+            { "transform": "rotate(-100deg) translateY(-20px)", "offset": 0.3 },
+            { "transform": "rotate(-100deg) translateY(-20px)", "offset": 0.9 },
+            { "transform": "rotate(0deg) translateY(0)" }
+          ]
+        },
+        {
+          "target": "#leg-front-left",
+          "duration": 1300,
+          "keyframes": [
+            { "transform": "rotate(0deg) translateY(0)" },
+            { "transform": "rotate(-85deg) translateY(-6px)", "offset": 0.3 },
+            { "transform": "rotate(-85deg) translateY(-6px)", "offset": 0.9 },
+            { "transform": "rotate(0deg) translateY(0)" }
           ]
         },
         {
           "target": "#leg-front-right",
-          "duration": 750,
+          "duration": 1300,
           "keyframes": [
-            { "transform": "rotate(0deg)" },
-            { "transform": "rotate(-70deg)", "offset": 0.5 },
-            { "transform": "rotate(0deg)" }
+            { "transform": "rotate(0deg) translateY(0)" },
+            { "transform": "rotate(-85deg) translateY(-6px)", "offset": 0.3 },
+            { "transform": "rotate(-85deg) translateY(-6px)", "offset": 0.9 },
+            { "transform": "rotate(0deg) translateY(0)" }
           ]
         },
         {
           "target": "#head",
-          "duration": 750,
+          "duration": 1300,
           "keyframes": [
             { "transform": "rotate(0deg) translateY(0)" },
-            { "transform": "rotate(-6deg) translateY(-4px)", "offset": 0.5 },
+            { "transform": "rotate(-9deg) translateY(-8px)", "offset": 0.3 },
+            { "transform": "rotate(-9deg) translateY(-8px)", "offset": 0.9 },
             { "transform": "rotate(0deg) translateY(0)" }
+          ]
+        },
+        {
+          "target": "#tail",
+          "duration": 1300,
+          "keyframes": [
+            { "transform": "rotate(0deg)" },
+            { "transform": "rotate(10deg)", "offset": 0.3 },
+            { "transform": "rotate(10deg)", "offset": 0.9 },
+            { "transform": "rotate(0deg)" }
           ]
         }
       ]
@@ -169,11 +213,38 @@
       "tracks": [
         {
           "target": "#head",
-          "duration": 400,
+          "duration": 1200,
           "keyframes": [
             { "transform": "translateY(0) rotate(0deg)" },
-            { "transform": "translateY(6px) rotate(-4deg)", "offset": 0.3 },
+            { "transform": "translateY(16px) rotate(-10deg)", "offset": 0.15 },
+            { "transform": "translateY(-4px) rotate(6deg)", "offset": 0.4 },
+            { "transform": "translateY(16px) rotate(-10deg)", "offset": 0.65 },
+            { "transform": "translateY(-4px) rotate(6deg)", "offset": 0.9 },
             { "transform": "translateY(0) rotate(0deg)" }
+          ]
+        },
+        {
+          "target": "#body",
+          "duration": 1200,
+          "keyframes": [
+            { "transform": "translateY(0) rotate(0deg)" },
+            { "transform": "translateY(-6px) rotate(-5deg)", "offset": 0.15 },
+            { "transform": "translateY(3px) rotate(3deg)", "offset": 0.4 },
+            { "transform": "translateY(-6px) rotate(-5deg)", "offset": 0.65 },
+            { "transform": "translateY(3px) rotate(3deg)", "offset": 0.9 },
+            { "transform": "translateY(0) rotate(0deg)" }
+          ]
+        },
+        {
+          "target": "#mouth-X",
+          "duration": 1200,
+          "keyframes": [
+            { "transform": "scale(1,1)" },
+            { "transform": "scale(1.6,2.2)", "offset": 0.15 },
+            { "transform": "scale(1,1)", "offset": 0.4 },
+            { "transform": "scale(1.6,2.2)", "offset": 0.65 },
+            { "transform": "scale(1,1)", "offset": 0.9 },
+            { "transform": "scale(1,1)" }
           ]
         }
       ]
