@@ -1,14 +1,15 @@
 {
   "id": "puppet-stage",
   "name": "Puppet Stage",
-  "version": "0.1.0",
-  "description": "Animated talking character with Rhubarb lip-sync: stage page, TTS speech object, and a pollable cue queue for directing it.",
+  "version": "0.2.0",
+  "description": "Animated talking character with Rhubarb lip-sync: stage page, TTS speech object, a pollable cue queue, and an OpenAI-backed director object for directing it.",
   "compatibility": {"dbbasic_object_server": ">=0.0.1"},
   "dependencies": [],
   "objects": [
     {"id": "puppet_stage", "path": "objects/puppet/stage.py"},
     {"id": "puppet_speak", "path": "objects/puppet/speak.py"},
-    {"id": "puppet_cues", "path": "objects/puppet/cues.py"}
+    {"id": "puppet_cues", "path": "objects/puppet/cues.py"},
+    {"id": "puppet_director", "path": "objects/puppet/director.py"}
   ],
   "schemas": [],
   "permissions": [],
