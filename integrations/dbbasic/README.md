@@ -60,8 +60,11 @@ the hook for AI/dashboard objects that want a talking face.
 against the grammar in the main README ("Screenplay language" and "Scenes,
 frames & overlays"), lints them in plain Python before performing them,
 optionally critiques a performance with vision (screenshots at 3 points in
-the show), and can audition a character's actions by screenshotting each
-pose and asking a vision model whether it reads as intended.
+the show, tiled by `ffmpeg` into one early/mid/late filmstrip), and can
+audition a character's actions by capturing 4 screenshots across each
+action's timeline (~15/40/65/90% of its duration) and tiling those into one
+filmstrip per action, so the vision model judges **motion** — a smooth arc,
+not just a single frozen pose — asking whether each one reads as intended.
 
 Unlike the other three objects, it does not run "inside" the package — it
 directs a **running Node stage app** (`server.js`) over plain HTTP, fetching
@@ -71,8 +74,10 @@ posting finished screenplays to `/api/script`.
 
 Env vars: `OPENAI_API_KEY` (or `OPENAI_KEY_FILE`, a path to a `.env`-style
 file containing an `OPENAI_API_KEY=...` line — the key itself is never
-logged or returned), `OPENAI_MODEL` (default `gpt-4o-mini`), `PUPPET_BASE`
-(default `http://127.0.0.1:3123`, the Node stage app to direct).
+logged or returned), `OPENAI_MODEL` (default `gpt-5.4-mini`, verified
+working against the existing chat-completions payload — temperature and all
+— with no param changes needed), `PUPPET_BASE` (default
+`http://127.0.0.1:3123`, the Node stage app to direct).
 
 ```sh
 # write, lint, and perform a screenplay
@@ -93,18 +98,26 @@ curl -X POST -H 'Content-Type: application/json' \
 
 **Cost:** every call spends your own OpenAI key — one chat completion per
 compose (two if the lint retry fires), plus one vision call per `review` or
-`review_character`. Defaults to `gpt-4o-mini` to keep this cheap; set
+`review_character`. Defaults to `gpt-5.4-mini` to keep this cheap; set
 `OPENAI_MODEL` for a stronger writer/critic if quality matters more than
-cost.
+cost, or a cheaper one for high-volume auditioning. Current pricing (July
+2026): `gpt-5.4-mini` $0.75/M input, $4.50/M output tokens; `gpt-5.4-nano`
+$0.20/$1.25 (budget option); `gpt-5.4` $2.50/$15 and `gpt-5.5` $5/$30 for
+higher quality — set via `OPENAI_MODEL`.
 
 **Caveat:** `review` and `review_character` shell out to headless Firefox
 *on the machine running the object server* (the same `?shot&d=<ms>`
 screenshot harness the main app's CLAUDE.md documents) to capture what the
-stage actually looks like. That's dev-friendly on a workstation but not a
+stage actually looks like, and to `ffmpeg` to tile those screenshots into
+one filmstrip image per performance/action (see "Install" above — `ffmpeg`
+is already a prerequisite). That's dev-friendly on a workstation but not a
 cloud-portable design — there's no headless browser in most object-server
 deployments, so these two modes are expected to degrade (skip vision, note
-why) anywhere Firefox isn't installed. Plain composing/performing needs
-nothing but network access to `PUPPET_BASE` and the OpenAI API.
+why) anywhere Firefox isn't installed. If Firefox works but `ffmpeg` tiling
+fails, both modes fall back to sending the individual (un-tiled) screenshots
+instead of one filmstrip, and note `"strip": false` in the result rather
+than failing outright. Plain composing/performing needs nothing but network
+access to `PUPPET_BASE` and the OpenAI API.
 
 ## Differences from the Node app
 

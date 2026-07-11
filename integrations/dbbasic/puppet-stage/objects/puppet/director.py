@@ -9,23 +9,62 @@ POST {"prompt": "...", "review": true, "apply_revision": false}
   compose+perform, then REVIEW: headless Firefox can't "join" a running show,
   so v1 re-performs the same script two more times (3 short performances),
   screenshotting each via the stage's `?shot&d=<ms>` harness at a different
-  point in the timeline, then one vision call over all 3 frames + the script
-  for a critique. apply_revision also performs the model's revised_script.
+  point in the timeline, tiles the 3 frames into ONE early|mid|late filmstrip
+  via ffmpeg (hstack + downscale to 1536px wide), then one vision call over
+  that single strip + the script for a critique (falls back to sending the 3
+  frames separately, noting "strip": false, if ffmpeg tiling fails).
+  apply_revision also performs the model's revised_script. Screenshot/cue
+  timing is anchored to server-observed navigation (see "screenshot timing"
+  below), not a fixed sleep after spawning Firefox, so the early/mid/late
+  offsets land where they're supposed to regardless of browser startup
+  jitter.
 POST {"review_character": "<name>", "actions": [optional subset]}
-  AUDITION: fires each action, screenshots mid-pose (spawn Firefox holding
-  ?shot&d=3500, fire the cue ~2.2s in so the load-hold captures it mid-
-  motion), plus one rest pose, then one vision call for an animation
-  critique.
+  AUDITION: fires each action FOUR times (spawn Firefox holding
+  ?shot&d=<ms>, post the action cue once navigation is confirmed, vary d per
+  shot so the load-hold lands the screenshot at ~15/40/65/90% of the
+  action's duration -- read from the character's manifest tracks, max track
+  duration, default 1000ms), tiles the 4 frames into ONE filmstrip per
+  action via ffmpeg (falls back to a single mid-action frame, noting
+  "strip": false, if ffmpeg tiling fails), plus one rest-pose still, then
+  one vision call (1 rest + up to 5 action filmstrips fits the
+  6-image-per-call budget) judging the MOTION across each strip. ~4
+  screenshots per action, so the action cap stays at 5. Every one of those
+  shots is a FRESH Firefox page (a fresh page always boots the module's
+  default character), so each `_shoot_at_phase` call gets a `prep_fn` that
+  POSTs {"type":"character","name":<name>} at nav+1.5s -- well before the
+  nav+3.0s action cue -- so the audited character (not the default) is
+  actually on stage for every rest shot and every filmstrip frame.
 GET -> {"status":"ok","usage": {...}}
 
+Screenshot timing: Firefox startup jitters 1-3s between spawn and actual
+navigation, so cueing actions/scripts a fixed delay after spawning Firefox
+puts the cue at an unpredictable phase (often before the page has even
+connected), producing static filmstrips. Instead the harness polls the
+stage server's GET /api/last-shot (set at the top of the server's /slowpx
+handler, which the page requests immediately on navigation) until it
+reports a value newer than a pre-spawn baseline -- that detection instant L
+is treated as ~= navigation time. Every cue (action POST /api/cue, or the
+POST /api/script that starts a show for review) fires at exactly L+3.0s,
+comfortably after the page has booted and connected its SSE stream; the
+`?shot&d=` hold is varied per shot (3000 + offset_ms) so the shutter lands
+`offset_ms` after the cue, landing the screenshot at whatever phase/offset
+into the action or show timeline is wanted -- independent of how long
+Firefox took to actually start. Falls back to the old fixed-sleep-after-
+spawn behavior if /api/last-shot 404s (older server without the route).
+
 Config (env): PUPPET_BASE (default http://127.0.0.1:3123), OPENAI_MODEL
-(default gpt-4o-mini), OPENAI_API_KEY or OPENAI_KEY_FILE (path to a
-.env-style file with an OPENAI_API_KEY=... line). Key is never logged or
-returned. Zero third-party deps: urllib.request against api.openai.com,
-subprocess for headless Firefox. Character/asset lists are fetched live from
-PUPPET_BASE and cached in-module for 60s so the model can't invent a name.
-Firefox/screenshot failures degrade review/audition (skip vision) instead of
-failing the whole request.
+(default gpt-5.4-mini -- verified working with the existing chat-completions
+payload, temperature included, no param changes needed; set to gpt-5.4-nano
+for a cheaper writer/critic or gpt-5.4/gpt-5.5 for a stronger one),
+OPENAI_API_KEY or OPENAI_KEY_FILE (path to a .env-style file with an
+OPENAI_API_KEY=... line). Key is never logged or returned. Zero third-party
+deps: urllib.request against api.openai.com, subprocess for headless Firefox
+and for ffmpeg (composites review/audition frames into single filmstrip
+images; falls back to sending un-tiled frames if ffmpeg tiling fails).
+Character/asset lists are fetched live from PUPPET_BASE and cached
+in-module for 60s so the model can't invent a name. Firefox/screenshot/
+ffmpeg failures degrade review/audition (skip vision, or fall back to
+un-tiled frames) instead of failing the whole request.
 """
 
 import base64
@@ -40,8 +79,9 @@ import urllib.error
 import urllib.request
 
 BASE = os.environ.get("PUPPET_BASE", "http://127.0.0.1:3123").rstrip("/")
-MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.4-mini")
 FIREFOX = "/Applications/Firefox.app/Contents/MacOS/firefox"
+FFMPEG = shutil.which("ffmpeg") or "ffmpeg"
 OPENAI_URL = "https://api.openai.com/v1/chat/completions"
 
 GRAMMAR = """SCREENPLAY GRAMMAR (plain text file, one or more directions per bracket line)
@@ -402,57 +442,219 @@ def _perform(script, main_char):
 
 # --------------------------------------------------------- screenshot harness
 
-def _shot_data_uri(url, timeout):
-    if not os.path.exists(FIREFOX):
-        raise RuntimeError(f"firefox not found at {FIREFOX}")
-    profile = tempfile.mkdtemp(prefix="ffprof-")
-    fd, out = tempfile.mkstemp(suffix=".png")
-    os.close(fd)
-    try:
-        subprocess.run(
-            [FIREFOX, "--headless", "--new-instance", "--profile", profile,
-             "--screenshot", out, "--window-size=1280,760", url],
-            capture_output=True, timeout=timeout, check=True)
-        if not os.path.exists(out) or os.path.getsize(out) == 0:
-            raise RuntimeError("screenshot not produced")
-        with open(out, "rb") as fh:
-            raw = fh.read()
-        return "data:image/png;base64," + base64.b64encode(raw).decode()
-    finally:
-        shutil.rmtree(profile, ignore_errors=True)
-        try:
-            os.remove(out)
-        except OSError:
-            pass
+# `?shot&d=<ms>` (see main README/CLAUDE.md) holds the page's `load` event
+# open for <ms> via a `document.write`'n <img src="/slowpx?d=<ms>">; Firefox's
+# --screenshot waits for `load`, so `d` is purely "how long from navigation
+# start to shutter", independent of anything else.
+#
+# Firefox startup (spawn -> actual navigation) jitters ~1-3s, so a cue fired
+# a fixed delay after *spawning* Firefox lands at an unpredictable phase --
+# the root cause of the nondeterministic/static filmstrips this harness used
+# to produce. Instead we anchor to navigation itself, which the *server* can
+# observe: the page requests /slowpx immediately on load, and the server
+# stamps that instant (see /api/last-shot in server.js). The harness polls
+# for a fresh /api/last-shot value after spawning Firefox; the poll-detected
+# instant L is treated as ~= navigation (detection lag is bounded by the
+# poll interval). Every cue then fires at exactly L + _CUE_DELAY seconds --
+# comfortably after the page's JS has booted and connected its SSE stream --
+# and the requested `?shot&d=` hold is _CUE_DELAY*1000 + offset_ms, so the
+# shutter lands `offset_ms` after the cue regardless of how long Firefox
+# actually took to start. _BOOT_DELAY is kept only as the fixed-sleep
+# fallback for servers that don't expose /api/last-shot.
+_CUE_DELAY = 3.0  # seconds after detected navigation that every cue fires at
+_PREP_DELAY = 1.5  # seconds after detected navigation that an optional prep_fn fires at (before cue_fn)
+_BOOT_DELAY = 2.2  # seconds (fallback-only: fixed sleep after spawn, pre-nav-anchoring behavior)
+_POLL_INTERVAL = 0.1  # seconds between /api/last-shot polls
+_POLL_TIMEOUT = 15.0  # seconds to wait for a fresh /api/last-shot before giving up
+_PHASES = (0.15, 0.40, 0.65, 0.90)  # filmstrip frame offsets across an action
 
-def _timed_action_shot(name, action):
-    """Spawn firefox holding ?shot&d=3500, fire the action ~2.2s in, wait for
-    the screenshot to land mid-motion. `action` None captures a rest pose."""
+def _last_shot_t():
+    """GET {BASE}/api/last-shot -> the server-clock ms of the most recent
+    /slowpx (navigation) request, or None if the server doesn't expose the
+    route (404 -> older server, so the caller should fall back to the fixed
+    -sleep-after-spawn timing). Any other failure propagates, same as every
+    other _http_get call in this module."""
+    try:
+        return _http_get(f"{BASE}/api/last-shot", timeout=5).get("t") or 0
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return None
+        raise
+
+def _wait_for_nav(t_before, timeout=_POLL_TIMEOUT):
+    """Poll /api/last-shot every _POLL_INTERVAL until it reports a value
+    newer than t_before (a fresh /slowpx request = the page just navigated),
+    or timeout. Returns local time.time() at the detecting poll (treated as
+    ~= navigation time) or None on timeout."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        t = _last_shot_t()
+        if t and t > t_before:
+            return time.time()
+        time.sleep(_POLL_INTERVAL)
+    return None
+
+def _shoot_at_phase(cue_fn, offset_ms, out_path, timeout, prep_fn=None):
+    """Nav-anchored screenshot capture. Spawns headless Firefox holding
+    `?shot&d=<_CUE_DELAY*1000 + offset_ms>`, waits until the server reports
+    a fresh navigation (via /api/last-shot), then sleeps until exactly
+    _CUE_DELAY seconds after that detected navigation and invokes `cue_fn()`
+    (a zero-arg callable that fires whatever cue matters -- an action POST,
+    or the POST that starts a show for review; pass None for a plain no-cue
+    still). If `prep_fn` is given, it's invoked first, at exactly
+    _PREP_DELAY seconds after detected navigation (the page has connected
+    by then, and a prep POST like loading a character is fast/local) --
+    e.g. to put the right character on THIS fresh page before its action
+    cue fires, since every freshly spawned page boots the module's default
+    character. Since the shutter fires at nav + d_ms = nav + _CUE_DELAY*1000
+    + offset_ms, and cue_fn fires at nav + _CUE_DELAY*1000 regardless of
+    whether prep_fn ran, the screenshot still lands exactly `offset_ms`
+    after cue_fn -- independent of Firefox startup jitter between spawn and
+    actual navigation.
+    Falls back to the old fixed-sleep-after-spawn behavior (prep_fn, if
+    given, fires _CUE_DELAY - _PREP_DELAY seconds before cue_fn, which
+    itself fires at _BOOT_DELAY after spawn; d_ms = _BOOT_DELAY*1000 +
+    offset_ms) if the server doesn't expose /api/last-shot (404 -> older
+    server).
+    Writes the PNG to out_path; caller owns cleanup."""
     if not os.path.exists(FIREFOX):
         raise RuntimeError(f"firefox not found at {FIREFOX}")
+    t_before = _last_shot_t()
+    fallback = t_before is None
+    d_ms = int((_BOOT_DELAY if fallback else _CUE_DELAY) * 1000 + offset_ms)
     profile = tempfile.mkdtemp(prefix="ffprof-")
-    fd, out = tempfile.mkstemp(suffix=".png")
-    os.close(fd)
     try:
         proc = subprocess.Popen(
             [FIREFOX, "--headless", "--new-instance", "--profile", profile,
-             "--screenshot", out, "--window-size=1280,760", f"{BASE}/?shot&d=3500"],
+             "--screenshot", out_path, "--window-size=1280,760", f"{BASE}/?shot&d={d_ms}"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        time.sleep(2.2)
-        if action:
-            _http_post(f"{BASE}/api/cue", {"type": "action", "name": action})
-        proc.wait(timeout=20)
-        if not os.path.exists(out) or os.path.getsize(out) == 0:
+        if fallback:
+            if prep_fn:
+                prep_wait = max(_BOOT_DELAY - (_CUE_DELAY - _PREP_DELAY), 0)
+                time.sleep(prep_wait)
+                prep_fn()
+                remaining = _BOOT_DELAY - prep_wait
+                if remaining > 0:
+                    time.sleep(remaining)
+            else:
+                time.sleep(_BOOT_DELAY)
+        else:
+            nav_at = _wait_for_nav(t_before)
+            if nav_at is None:
+                raise RuntimeError("navigation not detected via /api/last-shot within timeout")
+            if prep_fn:
+                remaining = (nav_at + _PREP_DELAY) - time.time()
+                if remaining > 0:
+                    time.sleep(remaining)
+                prep_fn()
+            remaining = (nav_at + _CUE_DELAY) - time.time()
+            if remaining > 0:
+                time.sleep(remaining)
+        if cue_fn:
+            cue_fn()
+        proc.wait(timeout=timeout)
+        if not os.path.exists(out_path) or os.path.getsize(out_path) == 0:
             raise RuntimeError("screenshot not produced")
-        with open(out, "rb") as fh:
-            raw = fh.read()
-        return "data:image/png;base64," + base64.b64encode(raw).decode()
     finally:
         shutil.rmtree(profile, ignore_errors=True)
+
+def _data_uri_from_file(path):
+    with open(path, "rb") as fh:
+        raw = fh.read()
+    return "data:image/png;base64," + base64.b64encode(raw).decode()
+
+def _ffmpeg_hstack(frame_paths, out_path, width=1536):
+    """Composite N same-size screenshots into one horizontal filmstrip,
+    downscaled to `width` so detail survives OpenAI's image tiling without
+    waste. For 4 frames this runs:
+      ffmpeg -y -i f1.png -i f2.png -i f3.png -i f4.png -filter_complex
+        "[0][1][2][3]hstack=inputs=4,scale=1536:-1" strip.png
+    Returns False (never raises) on any failure so callers can fall back to
+    sending the individual frames."""
+    n = len(frame_paths)
+    if n < 2:
+        return False
+    inputs = []
+    for p in frame_paths:
+        inputs += ["-i", p]
+    refs = "".join(f"[{i}]" for i in range(n))
+    filt = f"{refs}hstack=inputs={n},scale={width}:-1"
+    cmd = [FFMPEG, "-y"] + inputs + ["-filter_complex", filt, out_path]
+    try:
+        subprocess.run(cmd, capture_output=True, timeout=30, check=True)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+        return False
+    return os.path.exists(out_path) and os.path.getsize(out_path) > 0
+
+def _action_cue_fn(action):
+    return lambda: _http_post(f"{BASE}/api/cue", {"type": "action", "name": action})
+
+def _rest_shot(name, prep_fn=None):
+    """Single still, rest pose (no action cue) -- shutter at nav+_CUE_DELAY
+    (3s) gives the stage plenty of time to settle. `prep_fn`, if given,
+    fires at nav+_PREP_DELAY to load `name` onto this fresh page first
+    (every freshly spawned page otherwise boots the module's default
+    character, not the audited one)."""
+    fd, path = tempfile.mkstemp(suffix=".png")
+    os.close(fd)
+    try:
+        _shoot_at_phase(None, 0, path, timeout=_CUE_DELAY + 20, prep_fn=prep_fn)
+        return _data_uri_from_file(path)
+    finally:
         try:
-            os.remove(out)
+            os.remove(path)
         except OSError:
             pass
+
+def _action_duration_ms(manifest, action):
+    """Max track duration (ms) for an action in a character's manifest.json,
+    defaulting to 1000ms if the action/tracks are missing or malformed."""
+    tracks = ((manifest.get("actions") or {}).get(action) or {}).get("tracks") or []
+    durations = [t.get("duration") for t in tracks
+                 if isinstance(t.get("duration"), (int, float)) and t.get("duration") > 0]
+    return max(durations) if durations else 1000
+
+def _action_filmstrip(name, action, duration_ms, prep_fn=None):
+    """Capture 4 frames across the action's timeline at ~15/40/65/90% (see
+    _PHASES) and composite them into one horizontal filmstrip via ffmpeg,
+    scaled to 1536px wide. Each frame is its own fresh Firefox page, so
+    `prep_fn` (if given) is forwarded to every one of the 4 `_shoot_at_phase`
+    calls to load `name` onto that page before its action cue fires --
+    otherwise every fresh page boots the module's default character and
+    the action never actually plays on the character being audited.
+    Returns (images, strip_ok): on success `images` is a single-element
+    list holding the strip data URI; on ffmpeg failure it's a single-
+    element list holding just the ~40%-phase frame (the pre-filmstrip
+    single-mid-action-shot behavior), so the overall image-per-call budget
+    never grows, and strip_ok is False."""
+    frame_paths = []
+    try:
+        cue_fn = _action_cue_fn(action)
+        for phase in _PHASES:
+            fd, path = tempfile.mkstemp(suffix=".png")
+            os.close(fd)
+            frame_paths.append(path)
+            offset_ms = int(phase * duration_ms)
+            _shoot_at_phase(cue_fn, offset_ms, path,
+                             timeout=_CUE_DELAY + offset_ms / 1000 + 15, prep_fn=prep_fn)
+
+        fd, strip_path = tempfile.mkstemp(suffix=".png")
+        os.close(fd)
+        try:
+            if _ffmpeg_hstack(frame_paths, strip_path, width=1536):
+                return [_data_uri_from_file(strip_path)], True
+            return [_data_uri_from_file(frame_paths[1])], False
+        finally:
+            try:
+                os.remove(strip_path)
+            except OSError:
+                pass
+    finally:
+        for p in frame_paths:
+            try:
+                os.remove(p)
+            except OSError:
+                pass
 
 # ------------------------------------------------------------------ review
 
@@ -479,25 +681,60 @@ def _estimate_duration(script):
 def _review_show(script, main_char):
     duration = _estimate_duration(script)
     labels = ["early", "middle", "late"]
-    images = []
-    for label, frac in zip(labels, (0.2, 0.5, 0.85)):
-        d_ms = max(800, int(duration * 1000 * frac))
-        try:
-            _perform(script, main_char)
-            img = _shot_data_uri(f"{BASE}/?shot&d={d_ms}", timeout=d_ms / 1000 + 20)
-            images.append((label, img))
-        except Exception as exc:
-            return {"status": "unavailable", "reason": f"screenshot failed: {str(exc)[:200]}"}
-    content = [{"type": "text", "text":
-                f"Screenplay (estimated ~{int(duration)}s, performed 3 separate times; "
-                f"each image is a screenshot from a different run at the labeled point "
-                f"in the timeline):\n\n{script}"}]
-    for label, img in images:
-        content.append({"type": "text", "text": f"[{label}]"})
-        content.append({"type": "image_url", "image_url": {"url": img}})
+    frame_paths = []
+    try:
+        cue_fn = lambda: _perform(script, main_char)  # noqa: E731 - fires POST /api/script (starts the show) at nav+_CUE_DELAY
+        for label, frac in zip(labels, (0.2, 0.5, 0.85)):
+            offset_ms = int(duration * 1000 * frac)
+            fd, path = tempfile.mkstemp(suffix=".png")
+            os.close(fd)
+            frame_paths.append(path)
+            _shoot_at_phase(cue_fn, offset_ms, path, timeout=_CUE_DELAY + offset_ms / 1000 + 20)
+    except Exception as exc:
+        for p in frame_paths:
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+        return {"status": "unavailable", "reason": f"screenshot failed: {str(exc)[:200]}"}
+
+    strip_path = None
+    try:
+        fd, strip_path = tempfile.mkstemp(suffix=".png")
+        os.close(fd)
+        strip_ok = _ffmpeg_hstack(frame_paths, strip_path, width=1536)
+        if strip_ok:
+            content = [{"type": "text", "text":
+                        f"Screenplay (estimated ~{int(duration)}s, performed 3 separate times). "
+                        f"The image is ONE filmstrip of 3 panels left-to-right: early, middle, "
+                        f"late in the timeline:\n\n{script}"}]
+            content.append({"type": "image_url",
+                             "image_url": {"url": _data_uri_from_file(strip_path)}})
+        else:
+            content = [{"type": "text", "text":
+                        f"Screenplay (estimated ~{int(duration)}s, performed 3 separate times; "
+                        f"each image is a screenshot from a different run at the labeled point "
+                        f"in the timeline):\n\n{script}"}]
+            for label, path in zip(labels, frame_paths):
+                content.append({"type": "text", "text": f"[{label}]"})
+                content.append({"type": "image_url", "image_url": {"url": _data_uri_from_file(path)}})
+    finally:
+        for p in frame_paths:
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+        if strip_path:
+            try:
+                os.remove(strip_path)
+            except OSError:
+                pass
+
     system = (
         "You are reviewing a puppet-show performance for staging, timing, and "
-        "continuity issues from screenshots taken early/middle/late in the show. "
+        "continuity issues. The screenshots are supplied as one filmstrip image "
+        "with 3 panels left-to-right (early, middle, late in the show) -- or, if "
+        "tiling was unavailable, as 3 separately labeled screenshots. "
         "Return strict json only, no prose: "
         '{"issues":[{"when":"early|middle|late","what":"...","severity":"low|medium|high"}],'
         '"revised_script": "<full corrected screenplay>" or null}. '
@@ -513,6 +750,7 @@ def _review_show(script, main_char):
     except json.JSONDecodeError:
         return {"status": "error", "error": "vision critique was not valid json", "raw": raw[:500]}
     parsed.setdefault("status", "ok")
+    parsed["strip"] = strip_ok
     return parsed
 
 # ---------------------------------------------------------------- audition
@@ -529,17 +767,31 @@ def _audition(request):
     if not entry:
         return {"status": "error", "error": f"unknown character '{name}'"}
     requested = request.get("actions") or entry["actions"]
-    # cap total frames (rest pose + actions) at 6 per the vision-call image cap
+    # cap total images (1 rest still + up to 5 action filmstrips) at 6 per the vision-call image cap
     actions = [a for a in requested if a in entry["actions"]][:5]
     if not actions:
         return {"status": "error", "error": "no valid actions to audition"}
 
-    images = {}
     try:
-        _http_post(f"{BASE}/api/cue", {"type": "character", "name": name})
-        images["rest"] = _timed_action_shot(name, None)
+        manifest = _http_get(f"{BASE}/characters/{name}/manifest.json")
+    except Exception:
+        manifest = {}
+
+    images = {}  # label -> (list of data-uris, strip_ok)
+    strip_ok = True
+    # Every shot below is a FRESH Firefox page, and a fresh stage page always
+    # boots the module's default character -- so prep_fn (loading `name`) is
+    # passed into EVERY _shoot_at_phase call (via _rest_shot/_action_filmstrip)
+    # rather than posted once up front, which only affected pages that
+    # happened to be open at that moment.
+    prep_fn = lambda: _http_post(f"{BASE}/api/cue", {"type": "character", "name": name})  # noqa: E731
+    try:
+        images["rest"] = ([_rest_shot(name, prep_fn=prep_fn)], True)
         for action in actions:
-            images[action] = _timed_action_shot(name, action)
+            duration_ms = _action_duration_ms(manifest, action)
+            frames, ok = _action_filmstrip(name, action, duration_ms, prep_fn=prep_fn)
+            images[action] = (frames, ok)
+            strip_ok = strip_ok and ok
     except Exception as exc:
         if not images:
             return {"status": "error", "error": f"unavailable: {str(exc)[:200]}"}
@@ -547,15 +799,31 @@ def _audition(request):
 
     order = ["rest"] + [a for a in actions if a in images]
     content = [{"type": "text", "text":
-                f"Character: {name}. Judging {len(order)} labeled frames of a 2D cutout puppet rig."}]
+                f"Character: {name}. Judging {len(order)} labeled images of a 2D cutout puppet "
+                "rig: a rest-pose still, plus one motion image per action."}]
     for label in order:
-        content.append({"type": "text", "text": f"[{label}]" + (" (rest pose)" if label == "rest" else "")})
-        content.append({"type": "image_url", "image_url": {"url": images[label]}})
+        frames, ok = images[label]
+        if label == "rest":
+            note = " (rest pose, single still)"
+        elif ok:
+            note = (" (filmstrip: 4 frames left→right at ~15/40/65/90% of the action's "
+                     "motion -- judge the MOTION: does it read as the named action? is the "
+                     "arc smooth across the strip? clipping at any phase? silhouette clarity "
+                     "throughout?)")
+        else:
+            note = " (ffmpeg tiling unavailable -- single mid-action frame only, no motion arc)"
+        content.append({"type": "text", "text": f"[{label}]" + note})
+        for img in frames:
+            content.append({"type": "image_url", "image_url": {"url": img}})
     system = (
-        "You are an animation supervisor reviewing a 2D cutout puppet rig. For each "
-        "labeled action frame (compared against the rest pose) judge: does the pose "
-        "read as that named action? any clipping/overlap issues? is the silhouette "
-        "clear? Then give overall notes on the rig. Return strict json only, no prose: "
+        "You are an animation supervisor reviewing a 2D cutout puppet rig. The rest-pose "
+        "image is a single still. Each action image is normally a filmstrip of 4 frames "
+        "left→right at ~15/40/65/90% of that action's duration -- judge the MOTION across "
+        "the strip, not just a single pose: does it read as the named action? is the arc "
+        "smooth across the four phases? any clipping/overlap at any phase? is the silhouette "
+        "clear throughout? (A handful of actions may arrive as a single mid-action frame "
+        "instead, when filmstrip tiling wasn't available -- judge those as a static pose.) "
+        "Then give overall notes on the rig. Return strict json only, no prose: "
         '{"actions":{"<name>":{"reads":true|false,"issues":["..."]}},'
         '"overall":["..."],"suggestions":["concrete manifest keyframe or SVG tweaks"]}.'
     )
@@ -568,7 +836,8 @@ def _audition(request):
         verdict = json.loads(raw)
     except json.JSONDecodeError:
         return {"status": "error", "error": "vision verdict was not valid json", "raw": raw[:500]}
-    return {"status": "ok", "character": name, "images_captured": order, "verdict": verdict}
+    return {"status": "ok", "character": name, "images_captured": order, "strip": strip_ok,
+            "verdict": verdict}
 
 # ---------------------------------------------------------------- dispatch
 
@@ -632,8 +901,10 @@ def GET(request):
             "compose": 'POST {"prompt":"...", "perform":true, "review":false} '
                        "-> writes+lints+performs a screenplay",
             "review": 'POST {"prompt":"...", "review":true, "apply_revision":false} '
-                      "-> compose+perform, then a vision critique of 3 screenshots",
+                      "-> compose+perform, then a vision critique of one 3-panel "
+                      "early/mid/late filmstrip",
             "audition": 'POST {"review_character":"<name>", "actions":[...]} '
-                        "-> vision review of a character's action poses",
+                        "-> vision review of a character's action filmstrips (motion, "
+                        "not just a single pose)",
         },
     }

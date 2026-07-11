@@ -121,6 +121,7 @@ setInterval(() => { for (const res of clients) res.write(': ping\n\n'); }, 25000
 // ------------------------------------------------------------- TTS + sync
 
 let rhubarbOk = null; // lazily probed
+let lastSlowpx = 0; // Date.now() at the start of the most recent /slowpx request (nav marker for screenshot timing)
 
 async function probeRhubarb() {
   if (rhubarbOk !== null) return rhubarbOk;
@@ -955,10 +956,21 @@ const server = http.createServer(async (req, res) => {
 
     // 1x1 gif served after a delay — lets headless screenshots wait for async boot
     if (p === '/slowpx') {
+      lastSlowpx = Date.now(); // marks navigation: the page requests this immediately on load
       const gif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
       setTimeout(() => { res.writeHead(200, { 'Content-Type': 'image/gif' }); res.end(gif); },
         parseInt(url.searchParams.get('d'), 10) || 2500);
       return;
+    }
+
+    // GET /api/last-shot → {t}: Date.now() (server clock) at the start of the
+    // most recent /slowpx request, i.e. the navigation timestamp of the most
+    // recent headless screenshot page load. Used by the screenshot harness to
+    // anchor action cues to actual page navigation instead of a fixed sleep
+    // after spawning the browser process (browser startup jitter otherwise
+    // made cue timing nondeterministic). 0 if no /slowpx request has landed yet.
+    if (p === '/api/last-shot') {
+      return json(res, 200, { t: lastSlowpx || 0 });
     }
 
     // GET /api/asset/<kind>/<id> → the resolved file (first existing
