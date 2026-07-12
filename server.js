@@ -960,9 +960,14 @@ function buildConverseContext(character) {
   const base = persona || `You are ${displayName}, a puppet character on a small stage.`;
   const actionsList = actionNames.length ? actionNames.join(', ') : 'none';
   const prompt = `${base}\n` +
-    'Reply in character, conversationally, 1-3 short sentences (this will be spoken aloud). ' +
-    `You may include at most two stage actions inline in parentheses from this exact list: (${actionsList}). ` +
-    'Nothing else in parentheses. No emoji, no markdown.';
+    'You are a live animated puppet on a real stage, and you have a body: you can ' +
+    `physically perform these actions right now: ${actionsList}. ` +
+    'To perform one, write its name in parentheses inline with your words, e.g. "(nod) Absolutely." ' +
+    'Use one when it fits what you are saying — agree with a (nod), refuse with a (shake), ' +
+    'delight with a (happy). If someone asks whether you can do something on that list, ' +
+    'say yes and DO it in the same reply. At most two actions per reply; only names from ' +
+    'the list; nothing else in parentheses.\n' +
+    'Reply in character, conversationally, 1-3 short sentences (spoken aloud). No emoji, no markdown.';
   return { prompt, actionNames };
 }
 
