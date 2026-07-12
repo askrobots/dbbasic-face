@@ -98,6 +98,7 @@ class Puppet {
     for (const [shape, sel] of Object.entries(this.manifest.mouths || {})) {
       this.mouthEls[shape] = this.flip.querySelector(sel);
     }
+    this.currentMouth = null; // fresh SVG: force the hide-all pass even if the shape name matches
     this.setMouth(this.manifest.restMouth || 'X');
     this.setX(this.x, 0);
     this.startBlinking();
@@ -1421,8 +1422,22 @@ function handleCue(cue) {
       const p = puppetForCue(cue);
       if (p) p.speak(cue);
       stage.showCaption(cue);
+      // CONVERSATION MODE: if this speak cue is the reply we've been
+      // waiting on (see sendConverse below), drop the "thinking" look pose
+      // and flip the status line to speaking -> idle once the clip ends.
+      if (awaitingConverseReply && p && p === converseThinkPuppet) {
+        awaitingConverseReply = false;
+        converseThinkPuppet = null;
+        p.look('front');
+        setConverseStatus('speaking…');
+        clearTimeout(converseStatusTimer);
+        converseStatusTimer = setTimeout(() => setConverseStatus('idle'), (cue.duration || 0) * 1000 + 300);
+      }
       break;
     }
+    // CONVERSATION MODE: the human's own transcribed/typed words, broadcast
+    // by POST /api/converse purely for display — like a delayed CC bar.
+    case 'user-said': showUserCaption(cue.text); break;
     case 'action': { const p = puppetForCue(cue); if (p) p.act(cue.name); break; }
     case 'walk': { const p = puppetForCue(cue); if (p) p.walkTo(cue.x, cue.jump || cue.from); break; }
     case 'look': { const p = puppetForCue(cue); if (p) p.look(cue.dir); break; }
@@ -1934,6 +1949,7 @@ async function loadCharacter(name, frameId = 'main', extra = {}) {
   const sel = $id('character');
   if (sel.value !== name) sel.value = name;
   await applyVoicePref(f.puppet);
+  updateConverseNote();
 }
 
 $id('character').addEventListener('change', (e) => {
@@ -1980,6 +1996,235 @@ async function selectTargetFrame(id) {
   sel.value = (p && p.characterName) || ''; // silent: no change event dispatched
   buildActionButtons();
   await applyVoicePref(p);
+  updateConverseNote();
+}
+
+// ------------------------------------------------------ conversation mode
+//
+// Push-to-talk (pointer-held mic button, held Space, or a typed fallback) ->
+// POST /api/transcribe (mic path only) -> POST /api/converse. The server
+// does all the cue broadcasting itself (user-said caption, optional action,
+// the spoken reply) over the existing SSE bus — see the 'user-said'/'speak'
+// handling in handleCue above. A random per-tab session id threads turns
+// into one conversation; "new conversation" mints a fresh one. The panel
+// hides entirely when GET /api/converse reports no key configured; the mic
+// button alone (not the whole section) dims out if getUserMedia is
+// unavailable/denied, since the typed fallback still works with no
+// microphone at all.
+
+let converseSessionId = null;
+let converseMicOk = true;
+let pttStream = null;
+let pttRecorder = null;
+let pttChunks = [];
+let pttActive = false;
+let awaitingConverseReply = false; // true from POST /api/converse until its matching speak cue arrives
+let converseThinkPuppet = null;    // puppet holding the "look up and think" idle pose while we wait
+let converseStatusTimer = null;
+let userCaptionTimer = null;
+
+function newConverseSession() {
+  converseSessionId = Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+function setConverseStatus(text) {
+  const el = $id('converse-status');
+  if (el) el.textContent = text;
+}
+
+function updateConverseNote() {
+  const el = $id('converse-note');
+  if (!el) return;
+  const p = targetPuppet();
+  el.textContent = p && p.characterName ? `talking with ${p.characterName}` : 'no character loaded';
+}
+
+// Delayed-CC display for the human's own words (see #user-caption in
+// index.html) — visually distinct from the character's #captions bar
+// (dimmer, top-center, "you:" prefix). Auto-hides after max(2.5s,
+// words*0.35s), mirroring the pacing #captions gets from cue.duration.
+function showUserCaption(text) {
+  const el = $id('user-caption');
+  if (!el) return;
+  clearTimeout(userCaptionTimer);
+  el.innerHTML = '';
+  const prefix = document.createElement('span');
+  prefix.className = 'you-prefix';
+  prefix.textContent = 'you:';
+  el.appendChild(prefix);
+  el.appendChild(document.createTextNode(' ' + text));
+  el.classList.add('shown');
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  const ms = Math.max(2500, words * 350);
+  userCaptionTimer = setTimeout(() => el.classList.remove('shown'), ms);
+}
+
+function pickRecorderMime() {
+  if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return '';
+  // Opus/webm first (Chrome/Firefox default); mp4/m4a (AAC) is Safari's
+  // supported container — MediaRecorder on Safari doesn't do webm at all.
+  for (const c of ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/mp4;codecs=mp4a.40.2', 'audio/aac']) {
+    if (MediaRecorder.isTypeSupported(c)) return c;
+  }
+  return '';
+}
+
+async function startPTT() {
+  if (pttActive || !converseMicOk) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    converseMicOk = false;
+    $id('ptt-btn').disabled = true;
+    toast('microphone not available — use the text box instead');
+    return;
+  }
+  try {
+    pttStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e) {
+    converseMicOk = false;
+    $id('ptt-btn').disabled = true;
+    toast('mic permission denied — use the text box instead');
+    return;
+  }
+  const mime = pickRecorderMime();
+  try {
+    pttRecorder = mime ? new MediaRecorder(pttStream, { mimeType: mime }) : new MediaRecorder(pttStream);
+  } catch (e) {
+    toast('could not start recorder: ' + e.message);
+    pttStream.getTracks().forEach((t) => t.stop());
+    pttStream = null;
+    return;
+  }
+  pttChunks = [];
+  pttRecorder.ondataavailable = (e) => { if (e.data && e.data.size) pttChunks.push(e.data); };
+  pttRecorder.start();
+  pttActive = true;
+  $id('ptt-btn').classList.add('listening');
+  setConverseStatus('listening…');
+}
+
+function stopPTT() {
+  if (!pttActive || !pttRecorder) return;
+  pttActive = false;
+  $id('ptt-btn').classList.remove('listening');
+  const recorder = pttRecorder;
+  pttRecorder = null;
+  const mimeType = recorder.mimeType || 'audio/webm';
+  recorder.onstop = async () => {
+    if (pttStream) { pttStream.getTracks().forEach((t) => t.stop()); pttStream = null; }
+    const blob = new Blob(pttChunks, { type: mimeType });
+    pttChunks = [];
+    if (!blob.size) { setConverseStatus('idle'); return; }
+    setConverseStatus('thinking…');
+    let text;
+    try {
+      const r = await fetch('/api/transcribe', { method: 'POST', headers: { 'Content-Type': mimeType }, body: blob });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'transcribe failed');
+      text = (data.text || '').trim();
+    } catch (e) {
+      toast('transcribe failed: ' + e.message);
+      setConverseStatus('idle');
+      return;
+    }
+    if (!text) { toast('heard nothing'); setConverseStatus('idle'); return; }
+    sendConverse(text);
+  };
+  try { recorder.stop(); } catch { setConverseStatus('idle'); }
+}
+
+// Shared by both input paths (a mic transcript or the typed fallback): posts
+// one turn to /api/converse. The server broadcasts the user-said/action/
+// speak cues itself over SSE; this only drives local "thinking" presence
+// (look up while waiting; see handleCue's 'speak' case for the reply-arrival
+// half) and the status line.
+async function sendConverse(text) {
+  const puppet = targetPuppet();
+  if (!converseSessionId) newConverseSession();
+  setConverseStatus('thinking…');
+  converseThinkPuppet = puppet;
+  if (puppet) puppet.look('up');
+  awaitingConverseReply = true;
+  try {
+    const r = await fetch('/api/converse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text, character: puppet && puppet.characterName,
+        session: converseSessionId, frame: targetFrame,
+      }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'converse failed');
+  } catch (e) {
+    awaitingConverseReply = false;
+    converseThinkPuppet = null;
+    if (puppet) puppet.look('front');
+    toast('converse failed: ' + e.message);
+    setConverseStatus('idle');
+  }
+}
+
+const pttBtn = $id('ptt-btn');
+pttBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); startPTT(); });
+pttBtn.addEventListener('pointerup', stopPTT);
+pttBtn.addEventListener('pointerleave', stopPTT);
+pttBtn.addEventListener('pointercancel', stopPTT);
+
+// Spacebar doubles as push-to-talk, but only outside text fields (typing a
+// space in the Say box or the screenplay editor must never trigger it), and
+// never on an auto-repeat keydown (holding Space would otherwise re-fire
+// startPTT on every OS repeat interval).
+function inTextField() {
+  const el = document.activeElement;
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+}
+window.addEventListener('keydown', (e) => {
+  if (e.code !== 'Space' || e.repeat || inTextField()) return;
+  e.preventDefault();
+  startPTT();
+});
+window.addEventListener('keyup', (e) => {
+  if (e.code !== 'Space') return;
+  stopPTT();
+});
+
+// Typed fallback: skips /api/transcribe entirely, so conversation mode
+// works with no microphone (or no permission) at all.
+function submitTypedConverse() {
+  const input = $id('converse-text');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  sendConverse(text);
+}
+$id('converse-send').onclick = submitTypedConverse;
+$id('converse-text').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); submitTypedConverse(); }
+});
+
+$id('converse-reset').onclick = () => {
+  newConverseSession();
+  toast('new conversation');
+};
+
+// Hides the whole section when the server has no OpenAI key configured
+// (GET /api/converse -> {ready:false}), including when talking to the
+// dbbasic package's shim (its fetch bridge passes unknown /api/* through to
+// the object server, which 404s -> caught below -> hidden, same as a
+// same-origin fetch failure).
+async function initConverse() {
+  const section = $id('converse-section');
+  try {
+    const { ready } = await (await fetch('/api/converse')).json();
+    if (!ready) { section.style.display = 'none'; return; }
+  } catch {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = '';
+  updateConverseNote();
 }
 
 // ---------------------------------------------------------------- boot
@@ -1998,6 +2243,7 @@ async function selectTargetFrame(id) {
   if (!mainPuppet().manifest.voice) loadVoices();
   loadAssets();
   loadExamples();
+  initConverse();
   $id('script').value = [
     '# Try an example from the picker above, or run this:',
     '[captions on]',

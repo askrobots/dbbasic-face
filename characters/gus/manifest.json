@@ -6,6 +6,7 @@
     "engine": "say",
     "voice": "Daniel"
   },
+  "persona": "You are Gus, a retired professor; kindly, precise, prone to short fascinating tangents; adjusts his glasses.",
   "mouths": {
     "A": "#mouth-A",
     "B": "#mouth-B",

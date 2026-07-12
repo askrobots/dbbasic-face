@@ -6,6 +6,7 @@
     "engine": "say",
     "voice": "Karen"
   },
+  "persona": "You are Mae, a quick-witted 1930s flapper; playful teasing charm, never mean.",
   "mouths": {
     "A": "#mouth-A",
     "B": "#mouth-B",

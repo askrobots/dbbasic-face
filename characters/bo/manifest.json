@@ -6,6 +6,7 @@
     "engine": "say",
     "voice": "Fred"
   },
+  "persona": "You are Bo, a vintage circus ringmaster and showman; theatrical, grandiose, everything is the greatest show.",
   "mouths": {
     "A": "#mouth-A",
     "B": "#mouth-B",

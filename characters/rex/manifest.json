@@ -6,6 +6,7 @@
     "engine": "say",
     "voice": "Ralph"
   },
+  "persona": "You are Rex, a good dog. Replies are mostly woofs, barks, and simple dog thoughts (\"Woof! Ball?\"); at most one short sentence.",
   "mouths": {
     "A": "#mouth-A",
     "B": "#mouth-B",

@@ -2,6 +2,7 @@
   "name": "Pip",
   "svg": "puppet.svg",
   "height": 300,
+  "persona": "You are Pip, a cheerful simple puppet mascot, endlessly enthusiastic, a bit naive.",
   "mouths": {
     "A": "#mouth-A", "B": "#mouth-B", "C": "#mouth-C", "D": "#mouth-D",
     "E": "#mouth-E", "F": "#mouth-F", "G": "#mouth-G", "H": "#mouth-H",

@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <radialGradient id="sunny-shine" cx="36%" cy="30%" r="75%">
+      <stop offset="0%" stop-color="#ffe999"/>
+      <stop offset="55%" stop-color="#ffcc3d"/>
+      <stop offset="100%" stop-color="#ffbb1f"/>
+    </radialGradient>
+  </defs>
+
+  <g id="puppet" style="transform-box:fill-box;transform-origin:50% 100%">
+
+    <g id="head" style="transform-box:fill-box;transform-origin:50% 50%">
+      <circle cx="100" cy="100" r="80" fill="url(#sunny-shine)" stroke="#f0a400" stroke-width="3"/>
+      <ellipse cx="62" cy="42" rx="16" ry="8" fill="#fff" opacity="0.10"/>
+
+      <g id="brows">
+        <path id="brow-left" style="transform-box:fill-box;transform-origin:50% 50%"
+              d="M56,66 Q72,54 88,64" stroke="#c9790a" stroke-width="6.5" fill="none" stroke-linecap="round"/>
+        <path id="brow-right" style="transform-box:fill-box;transform-origin:50% 50%"
+              d="M112,64 Q128,54 144,66" stroke="#c9790a" stroke-width="6.5" fill="none" stroke-linecap="round"/>
+      </g>
+
+      <g id="eyes" style="transform-box:fill-box;transform-origin:50% 50%">
+        <ellipse id="eye-left" cx="72" cy="92" rx="11" ry="15" fill="#3c2a08"/>
+        <ellipse id="eye-right" cx="128" cy="92" rx="11" ry="15" fill="#3c2a08"/>
+        <g id="pupils">
+          <circle cx="76" cy="86" r="4" fill="#fff" opacity="0.92"/>
+          <circle cx="132" cy="86" r="4" fill="#fff" opacity="0.92"/>
+        </g>
+      </g>
+
+      <!-- Rhubarb mouth shapes: exactly one visible at a time.
+           Discipline: one bold simple shape per viseme — these render huge in face view. -->
+      <g id="mouths">
+        <g id="mouth-X">
+          <path d="M74,134 Q100,152 126,134" stroke="#8a5a12" stroke-width="8" fill="none" stroke-linecap="round"/>
+        </g>
+        <g id="mouth-A">
+          <path d="M84,142 Q100,145 116,142" stroke="#8a5a12" stroke-width="7" fill="none" stroke-linecap="round"/>
+        </g>
+        <g id="mouth-B">
+          <ellipse cx="100" cy="140" rx="14" ry="8" fill="#5c3a10"/>
+          <path d="M89,136 Q100,133.5 111,136 L111,139 Q100,137 89,139 Z" fill="#fff" opacity="0.9"/>
+        </g>
+        <g id="mouth-C">
+          <ellipse cx="100" cy="140" rx="15" ry="11" fill="#5c3a10"/>
+        </g>
+        <g id="mouth-D">
+          <ellipse cx="100" cy="140" rx="21" ry="16" fill="#5c3a10"/>
+          <path d="M88,150 Q100,142 112,150 Q106,156 100,156 Q94,156 88,150 Z" fill="#ff8a80"/>
+        </g>
+        <g id="mouth-E">
+          <circle cx="100" cy="140" r="11" fill="#5c3a10"/>
+        </g>
+        <g id="mouth-F">
+          <circle cx="100" cy="140" r="7" fill="#5c3a10"/>
+        </g>
+        <g id="mouth-G">
+          <path d="M86,138 Q100,135.5 114,138 L114,143 Q100,141 86,143 Z" fill="#fff" opacity="0.95"/>
+          <path d="M84,148 Q100,152 116,148" stroke="#8a5a12" stroke-width="6" fill="none" stroke-linecap="round"/>
+        </g>
+        <g id="mouth-H">
+          <ellipse cx="100" cy="140" rx="14" ry="11" fill="#5c3a10"/>
+          <path d="M93,146 Q100,133 107,146 Q100,150 93,146 Z" fill="#ff8a80"/>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

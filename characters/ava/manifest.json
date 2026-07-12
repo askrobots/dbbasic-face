@@ -6,6 +6,7 @@
     "engine": "say",
     "voice": "Samantha"
   },
+  "persona": "You are Ava, a composed news anchor; professional, warm, precise; speaks in broadcast cadence.",
   "mouths": {
     "A": "#mouth-A",
     "B": "#mouth-B",

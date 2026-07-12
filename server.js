@@ -821,6 +821,167 @@ async function listVoices(engine) {
     .map((m) => m[1].trim());
 }
 
+// ------------------------------------------------------ conversation mode
+//
+// CONVERSATION MODE: push-to-talk speech -> OpenAI transcription -> an
+// OpenAI chat completion replying in character -> spoken back through the
+// existing prepareSpeech/broadcast pipeline. Key loading mirrors the
+// integrations/dbbasic/puppet-stage director.py convention (OPENAI_API_KEY
+// env, else an OPENAI_KEY_FILE .env-style file) so both surfaces agree on
+// how a deployment supplies the key. The key lives only in this
+// module-level variable — never logged, never echoed back in a response.
+
+let openaiKey = '';
+(function loadOpenAIKey() {
+  const env = (process.env.OPENAI_API_KEY || '').trim();
+  if (env) { openaiKey = env; return; }
+  const file = (process.env.OPENAI_KEY_FILE || '').trim();
+  if (!file) return;
+  try {
+    const text = fs.readFileSync(file, 'utf8');
+    for (const line of text.split('\n')) {
+      const l = line.trim();
+      if (l.startsWith('OPENAI_API_KEY=')) {
+        openaiKey = l.slice('OPENAI_API_KEY='.length).trim().replace(/^["']|["']$/g, '');
+        break;
+      }
+    }
+  } catch { /* missing/unreadable key file; converse endpoints report not-configured */ }
+})();
+
+const NO_KEY_ERROR = 'no OpenAI key configured (set OPENAI_API_KEY or OPENAI_KEY_FILE)';
+const TRANSCRIBE_MODEL = process.env.TRANSCRIBE_MODEL || 'gpt-4o-mini-transcribe';
+const CONVERSE_MODEL = process.env.CONVERSE_MODEL || 'gpt-5.4-mini';
+
+// Content-Type -> filename extension, so the multipart upload's filename
+// matches the container the browser actually recorded (webm/ogg/mp4/wav).
+function audioExtFromContentType(ct) {
+  ct = (ct || '').toLowerCase();
+  if (ct.includes('ogg')) return 'ogg';
+  if (ct.includes('mp4') || ct.includes('m4a') || ct.includes('aac')) return 'mp4';
+  if (ct.includes('wav')) return 'wav';
+  return 'webm';
+}
+
+// Zero-dependency multipart/form-data POST to OpenAI's transcription
+// endpoint: two fields (model, file) built by hand via Buffer.concat.
+async function openaiTranscribe(bytes, contentType) {
+  if (!openaiKey) throw new Error(NO_KEY_ERROR);
+  const boundary = `----puppetstage${crypto.randomBytes(16).toString('hex')}`;
+  const ext = audioExtFromContentType(contentType);
+  const head = Buffer.from(
+    `--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\n${TRANSCRIBE_MODEL}\r\n` +
+    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="audio.${ext}"\r\n` +
+    `Content-Type: ${contentType || 'application/octet-stream'}\r\n\r\n`);
+  const tail = Buffer.from(`\r\n--${boundary}--\r\n`);
+  const body = Buffer.concat([head, bytes, tail]);
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60000);
+  let resp, text;
+  try {
+    resp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${openaiKey}`, 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+      body,
+      signal: controller.signal,
+    });
+    text = await resp.text();
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!resp.ok) throw new Error(`OpenAI ${resp.status}: ${text.slice(0, 300)}`);
+  let parsed;
+  try { parsed = JSON.parse(text); } catch { throw new Error('unexpected OpenAI response (transcribe)'); }
+  return parsed.text || '';
+}
+
+// Zero-dependency chat completion call for the in-character reply.
+async function openaiChat(messages) {
+  if (!openaiKey) throw new Error(NO_KEY_ERROR);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60000);
+  let resp, text;
+  try {
+    resp = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openaiKey}` },
+      body: JSON.stringify({ model: CONVERSE_MODEL, messages, temperature: 0.8 }),
+      signal: controller.signal,
+    });
+    text = await resp.text();
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!resp.ok) throw new Error(`OpenAI ${resp.status}: ${text.slice(0, 300)}`);
+  let parsed;
+  try { parsed = JSON.parse(text); } catch { throw new Error('unexpected OpenAI response (chat)'); }
+  const content = parsed.choices && parsed.choices[0] && parsed.choices[0].message && parsed.choices[0].message.content;
+  if (!content) throw new Error('unexpected OpenAI response shape (chat)');
+  return content.trim();
+}
+
+// Per-session rolling chat history: session id -> {messages:[{role,content}],
+// lastActive}. Capped at the last 20 messages; idle sessions (30 min) are
+// pruned opportunistically whenever /api/converse is next called.
+const CONVERSE_HISTORY_CAP = 20;
+const CONVERSE_IDLE_MS = 30 * 60 * 1000;
+const conversations = new Map();
+
+function conversationFor(id) {
+  const now = Date.now();
+  for (const [k, v] of conversations) {
+    if (now - v.lastActive > CONVERSE_IDLE_MS) conversations.delete(k);
+  }
+  let s = conversations.get(id);
+  if (!s) { s = { messages: [], lastActive: now }; conversations.set(id, s); }
+  s.lastActive = now;
+  return s;
+}
+
+function pushCapped(list, entry) {
+  list.push(entry);
+  if (list.length > CONVERSE_HISTORY_CAP) list.splice(0, list.length - CONVERSE_HISTORY_CAP);
+}
+
+// Builds the system prompt for a character: manifest.persona if the
+// manifest declares one (another agent is adding that field in parallel —
+// this only ever READS it), else a generic fallback. Also returns the
+// character's action names so the reply can be parsed against them.
+function buildConverseContext(character) {
+  let persona = null;
+  let actionNames = [];
+  try {
+    const manifest = JSON.parse(fs.readFileSync(path.join(CHARACTERS, character, 'manifest.json'), 'utf8'));
+    if (manifest && manifest.persona) persona = manifest.persona;
+    actionNames = Object.keys((manifest && manifest.actions) || {});
+  } catch { /* missing/unreadable manifest; fall back below */ }
+  const displayName = character ? character.charAt(0).toUpperCase() + character.slice(1) : 'the puppet';
+  const base = persona || `You are ${displayName}, a puppet character on a small stage.`;
+  const actionsList = actionNames.length ? actionNames.join(', ') : 'none';
+  const prompt = `${base}\n` +
+    'Reply in character, conversationally, 1-3 short sentences (this will be spoken aloud). ' +
+    `You may include at most two stage actions inline in parentheses from this exact list: (${actionsList}). ` +
+    'Nothing else in parentheses. No emoji, no markdown.';
+  return { prompt, actionNames };
+}
+
+// Extracts (action) tokens that match the character's known action names out
+// of a reply, in order, and strips them (and the whitespace they leave
+// behind) from the spoken text. A parenthetical that ISN'T a known action
+// name is left in place rather than silently eaten — the persona prompt
+// asks the model not to use parens for anything else, but a stray one
+// shouldn't corrupt the spoken line.
+function extractActions(text, actionNames) {
+  const known = new Set(actionNames);
+  const actions = [];
+  const stripped = text.replace(/\(([a-zA-Z][\w-]*)\)/g, (whole, name) => {
+    if (known.has(name)) { actions.push(name); return ' '; }
+    return whole;
+  });
+  return { text: stripped.replace(/\s+/g, ' ').trim(), actions };
+}
+
 // ----------------------------------------------------------------- static
 
 const MIME = {
@@ -877,6 +1038,82 @@ const server = http.createServer(async (req, res) => {
       const prepared = await prepareExternalAudio(bytes, url.searchParams.get('text') || '');
       broadcast({ type: 'speak', ...prepared });
       return json(res, 200, prepared);
+    }
+
+    // CONVERSATION MODE: readiness probe — the UI hides the Converse panel
+    // when this reports not-ready (no key configured).
+    if (p === '/api/converse' && req.method === 'GET') {
+      return json(res, 200, { ready: !!openaiKey });
+    }
+
+    // raw audio bytes body (webm/ogg/mp4/wav — whatever the browser's
+    // MediaRecorder produced; Content-Type says which), forwarded to
+    // OpenAI's transcription endpoint.
+    if (p === '/api/transcribe' && req.method === 'POST') {
+      if (!openaiKey) return json(res, 400, { error: NO_KEY_ERROR });
+      const bytes = await readRaw(req);
+      if (!bytes.length) return json(res, 400, { error: 'audio body required' });
+      try {
+        const text = await openaiTranscribe(bytes, req.headers['content-type']);
+        return json(res, 200, { text });
+      } catch (e) {
+        return json(res, 502, { error: e.message });
+      }
+    }
+
+    // {text, character, session, frame?} -> an in-character OpenAI reply,
+    // spoken on stage. Broadcasts (in order) a user-said caption cue, an
+    // optional concurrent action cue (the reply's first inline action, like
+    // a screenplay's (action) prefix), the speak cue itself, then any
+    // further inline actions as trailing action cues.
+    if (p === '/api/converse' && req.method === 'POST') {
+      if (!openaiKey) return json(res, 400, { error: NO_KEY_ERROR });
+      const body = await readBody(req);
+      const userText = (body.text || '').trim();
+      const character = body.character;
+      if (!userText) return json(res, 400, { error: 'text required' });
+      if (!character) return json(res, 400, { error: 'character required' });
+
+      const session = conversationFor(body.session || 'default');
+      const { prompt, actionNames } = buildConverseContext(character);
+      pushCapped(session.messages, { role: 'user', content: userText });
+
+      let reply;
+      try {
+        reply = await openaiChat([{ role: 'system', content: prompt }, ...session.messages]);
+      } catch (e) {
+        session.messages.pop(); // don't keep a user turn that never got a reply
+        return json(res, 502, { error: e.message });
+      }
+      pushCapped(session.messages, { role: 'assistant', content: reply });
+
+      const { text: spokenText, actions } = extractActions(reply, actionNames);
+
+      broadcast({ type: 'user-said', text: userText });
+      if (actions[0]) {
+        const actionCue = { type: 'action', name: actions[0] };
+        if (body.frame) actionCue.frame = body.frame;
+        broadcast(actionCue);
+      }
+
+      let prepared;
+      try {
+        const voice = characterVoice(character) || {};
+        prepared = await prepareSpeech({ text: spokenText || reply, engine: voice.engine, voice: voice.voice, rate: voice.rate });
+      } catch (e) {
+        return json(res, 502, { error: e.message });
+      }
+      const speakCue = { type: 'speak', ...prepared };
+      if (body.frame) speakCue.frame = body.frame;
+      broadcast(speakCue);
+
+      for (const name of actions.slice(1)) {
+        const cue = { type: 'action', name };
+        if (body.frame) cue.frame = body.frame;
+        broadcast(cue);
+      }
+
+      return json(res, 200, { reply: spokenText, actions, performed: true });
     }
 
     if (p === '/api/cue' && req.method === 'POST') {

@@ -1,0 +1,140 @@
+{
+  "name": "Sunny",
+  "svg": "puppet.svg",
+  "height": 260,
+  "voice": {
+    "engine": "say",
+    "voice": "Allison (Enhanced)"
+  },
+  "persona": "You are Sunny, a warm, curious, upbeat AI companion with a simple smiley face. You love chatting, ask small follow-up questions, and keep answers short and friendly.",
+  "mouths": {
+    "A": "#mouth-A",
+    "B": "#mouth-B",
+    "C": "#mouth-C",
+    "D": "#mouth-D",
+    "E": "#mouth-E",
+    "F": "#mouth-F",
+    "G": "#mouth-G",
+    "H": "#mouth-H",
+    "X": "#mouth-X"
+  },
+  "restMouth": "X",
+  "blink": { "target": "#eyes" },
+  "look": { "target": "#pupils", "dx": 5, "dy": 3 },
+  "walk": { "speed": 200, "bob": false },
+  "views": {
+    "face": {
+      "focus": "#head",
+      "fill": 0.7
+    }
+  },
+  "idle": {
+    "breathe": {
+      "target": "#head",
+      "amount": 1.2,
+      "period": 4000
+    },
+    "gaze": true
+  },
+  "anchors": {
+    "head": "#head"
+  },
+  "actions": {
+    "nod": {
+      "tracks": [
+        {
+          "target": "#head",
+          "duration": 1100,
+          "keyframes": [
+            { "transform": "translateY(0)" },
+            { "transform": "translateY(9px)", "offset": 0.25 },
+            { "transform": "translateY(0)", "offset": 0.5 },
+            { "transform": "translateY(9px)", "offset": 0.75 },
+            { "transform": "translateY(0)" }
+          ]
+        }
+      ]
+    },
+    "shake": {
+      "tracks": [
+        {
+          "target": "#head",
+          "duration": 1100,
+          "keyframes": [
+            { "transform": "translateX(0)" },
+            { "transform": "translateX(-10px)", "offset": 0.2 },
+            { "transform": "translateX(10px)", "offset": 0.45 },
+            { "transform": "translateX(-10px)", "offset": 0.7 },
+            { "transform": "translateX(0)" }
+          ]
+        }
+      ]
+    },
+    "happy": {
+      "hold": true,
+      "tracks": [
+        { "target": "#brow-left", "duration": 300, "fill": "forwards",
+          "keyframes": [{ "transform": "translateY(0)" }, { "transform": "translateY(-5px)" }] },
+        { "target": "#brow-right", "duration": 300, "fill": "forwards",
+          "keyframes": [{ "transform": "translateY(0)" }, { "transform": "translateY(-5px)" }] },
+        { "target": "#eyes", "duration": 300, "fill": "forwards",
+          "keyframes": [{ "transform": "scaleY(1)" }, { "transform": "scaleY(0.8)" }] }
+      ]
+    },
+    "sad": {
+      "hold": true,
+      "tracks": [
+        { "target": "#brow-left", "duration": 300, "fill": "forwards",
+          "keyframes": [{ "transform": "rotate(0deg) translateY(0)" }, { "transform": "rotate(14deg) translateY(4px)" }] },
+        { "target": "#brow-right", "duration": 300, "fill": "forwards",
+          "keyframes": [{ "transform": "rotate(0deg) translateY(0)" }, { "transform": "rotate(-14deg) translateY(4px)" }] },
+        { "target": "#head", "duration": 300, "fill": "forwards",
+          "keyframes": [{ "transform": "translateY(0)" }, { "transform": "translateY(6px)" }] }
+      ]
+    },
+    "surprised": {
+      "hold": true,
+      "tracks": [
+        { "target": "#brow-left", "duration": 250, "fill": "forwards",
+          "keyframes": [{ "transform": "translateY(0)" }, { "transform": "translateY(-8px)" }] },
+        { "target": "#brow-right", "duration": 250, "fill": "forwards",
+          "keyframes": [{ "transform": "translateY(0)" }, { "transform": "translateY(-8px)" }] },
+        { "target": "#eyes", "duration": 250, "fill": "forwards",
+          "keyframes": [{ "transform": "scale(1)" }, { "transform": "scale(1.22)" }] }
+      ]
+    },
+    "neutral": { "reset": true, "tracks": [] },
+    "bounce": {
+      "tracks": [
+        {
+          "target": "#puppet",
+          "duration": 900,
+          "easing": "ease-in-out",
+          "keyframes": [
+            { "transform": "translateY(0) scale(1,1)" },
+            { "transform": "translateY(8px) scale(1.18,0.85)", "offset": 0.15 },
+            { "transform": "translateY(-46px) scale(0.92,1.1)", "offset": 0.4 },
+            { "transform": "translateY(-18px) scale(0.96,1.05)", "offset": 0.65 },
+            { "transform": "translateY(4px) scale(1.15,0.87)", "offset": 0.9 },
+            { "transform": "translateY(0) scale(1,1)" }
+          ]
+        }
+      ]
+    },
+    "think": {
+      "tracks": [
+        {
+          "target": "#head",
+          "duration": 1600,
+          "easing": "ease-in-out",
+          "keyframes": [
+            { "transform": "rotate(0deg) translate(0,0)" },
+            { "transform": "rotate(-9deg) translate(-4px,-3px)", "offset": 0.15 },
+            { "transform": "rotate(-9deg) translate(-4px,-3px)", "offset": 0.9 },
+            { "transform": "rotate(0deg) translate(0,0)" }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -90,6 +90,19 @@
   }
   #captions.shown { opacity: 1; }
 
+  /* ---- user-caption: delayed-CC style bar for the human's own words in
+     CONVERSATION MODE, top-center so it never collides with the character's
+     reply caption (which uses the bottom-anchored #captions bar above). */
+  #user-caption {
+    position: absolute; left: 50%; top: 6%; transform: translateX(-50%);
+    max-width: 82%; padding: 6px 16px; border-radius: 10px;
+    background: rgba(10,12,18,.5); color: #c8cede; font-size: 16px; line-height: 1.4;
+    text-align: center; pointer-events: none; z-index: 6;
+    opacity: 0; transition: opacity .15s ease;
+  }
+  #user-caption.shown { opacity: 1; }
+  #user-caption .you-prefix { color: #7a81a0; font-weight: 700; margin-right: 4px; }
+
   /* ---- take: fullscreen transitions (iris/fade), above captions */
   #take { position: absolute; inset: 0; pointer-events: none; z-index: 7; display: none; }
   #take .iris-hole {
@@ -145,6 +158,14 @@
   label { font-size: 12px; color: #8b93ab; }
   #record-toggle.rec-on { background: #b33; border-color: #b33; }
   #record-toggle.rec-on:hover { background: #c44; }
+  #ptt-btn { padding: 16px 10px; font-size: 15px; font-weight: 600; }
+  #ptt-btn.listening { background: #b33; border-color: #b33; }
+  #ptt-btn.listening:hover { background: #c44; }
+  #ptt-btn:disabled { opacity: .4; cursor: default; }
+  #ptt-btn:disabled:hover { background: #232735; }
+  #converse-status { font-size: 12px; color: #8b93ab; align-self: center; }
+  #converse-note { font-size: 12px; color: #8b93ab; }
+  #converse-hint { font-size: 11px; color: #565d78; }
   #wait-btn:disabled { opacity: .4; cursor: default; }
   #wait-btn:disabled:hover { background: #232735; }
   #help-toggle { flex: 0 0 auto; font-weight: 700; }
@@ -177,6 +198,7 @@
       <div id="frames"></div>
       <div id="overlays"></div>
       <div id="captions"></div>
+      <div id="user-caption"></div>
       <div id="take"><div class="iris-hole"></div></div>
       <div id="prompter"></div>
       <div id="toast"></div>
@@ -276,6 +298,21 @@
       <div class="row" style="align-items:center">
         <span id="audio-state" style="font-size:12px;color:#8b93ab">audio: —</span>
         <button id="beep" type="button" style="flex:0 0 auto;font-size:12px">🔊 test beep</button>
+      </div>
+    </section>
+
+    <section id="converse-section" style="display:none">
+      <h2>Converse</h2>
+      <div id="converse-note">no character loaded</div>
+      <button type="button" id="ptt-btn">🎙 Hold to talk</button>
+      <div id="converse-hint">or hold Space (outside text fields)</div>
+      <div class="row">
+        <input type="text" id="converse-text" placeholder="…or type instead" autocomplete="off">
+        <button type="button" id="converse-send" style="flex:0 0 auto">Send</button>
+      </div>
+      <div class="row">
+        <button type="button" id="converse-reset" style="flex:0 0 auto">new conversation</button>
+        <span id="converse-status">idle</span>
       </div>
     </section>
 
