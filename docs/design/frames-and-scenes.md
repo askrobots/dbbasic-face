@@ -57,6 +57,8 @@ A frame is placed by a named **slot** (scripting convenience) or an explicit
 | `full`    | 0, 0, 100, 100        | default single view          |
 | `left`    | 0, 0, 50, 100         | two-box left                 |
 | `right`   | 50, 0, 50, 100        | two-box right                |
+| `top`     | 0, 0, 100, 50         | vertical stack, top          |
+| `bottom`  | 0, 50, 100, 50        | vertical stack, bottom       |
 | `third-l` | 0, 0, 33.34, 100      | three across                 |
 | `third-c` | 33.33, 0, 33.34, 100  |                              |
 | `third-r` | 66.66, 0, 33.34, 100  |                              |
@@ -131,6 +133,7 @@ makes sense):
 
 - `single` → one `full` frame `main`
 - `split` → frames `left` + `right`
+- `stack` → frames `top` + `bottom` (vertical stack, for 9:16/Shorts framing)
 - `thirds` → `third-l` + `third-c` + `third-r`
 - `pip-tr` (etc.) → `main` full + a `pip` frame in that corner
 

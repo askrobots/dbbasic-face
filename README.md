@@ -234,6 +234,13 @@ together. Paste it into the Screenplay box and hit Run.
   movement instead of phoneme shapes.
 - `http://localhost:3123/?shot` delays page-load completion ~3 s so headless
   browser screenshots capture the fully booted stage.
+- **Recording vertical video.** Open `http://localhost:3123/?clean` in a
+  browser window sized to a 9:16 shape (e.g. 608×1080) — the authoring panel
+  and teleprompter disappear and `#stage` fills the whole window. Drive the
+  show from a second tab (the normal panel) or the API/a screenplay, and
+  record the clean window with your screen recorder of choice. Use
+  `[layout stack]` (frames `top` + `bottom`) for a two-character vertical
+  composition.
 
 ## License
 

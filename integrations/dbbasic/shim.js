@@ -83,6 +83,7 @@
   const LAYOUT_FRAMES = {
     single: ['main'],
     split: ['left', 'right'],
+    stack: ['top', 'bottom'],
     thirds: ['third-l', 'third-c', 'third-r'],
     'pip-tr': ['main', 'pip'], 'pip-tl': ['main', 'pip'],
     'pip-br': ['main', 'pip'], 'pip-bl': ['main', 'pip'],

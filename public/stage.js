@@ -20,6 +20,8 @@ const SLOTS = {
   full: [0, 0, 100, 100],
   left: [0, 0, 50, 100],
   right: [50, 0, 50, 100],
+  top: [0, 0, 100, 50],
+  bottom: [0, 50, 100, 50],
   'third-l': [0, 0, 33.34, 100],
   'third-c': [33.33, 0, 33.34, 100],
   'third-r': [66.66, 0, 33.34, 100],
@@ -33,6 +35,7 @@ const SLOTS = {
 const LAYOUT_PRESETS = {
   single: [{ id: 'main', slot: 'full' }],
   split: [{ id: 'left', slot: 'left' }, { id: 'right', slot: 'right' }],
+  stack: [{ id: 'top', slot: 'top' }, { id: 'bottom', slot: 'bottom' }],
   thirds: [
     { id: 'third-l', slot: 'third-l' },
     { id: 'third-c', slot: 'third-c' },

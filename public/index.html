@@ -12,6 +12,13 @@
     display: grid; grid-template-columns: 1fr 340px;
     height: 100vh; overflow: hidden;
   }
+  /* ---- clean mode: chromeless performance view (?clean) — hide the
+     authoring panel and teleprompter so #stage fills the whole window; the
+     show is driven from another tab/api, this is purely a display view. */
+  body.clean { grid-template-columns: 1fr; }
+  body.clean aside { display: none; }
+  body.clean #prompter { display: none; }
+
   main { display: flex; flex-direction: column; min-width: 0; }
 
   #stage {
@@ -198,11 +205,12 @@
 
         <h3>Scene &amp; frames</h3>
         <dl>
-          <dt>[layout preset]</dt><dd>single|split|thirds|pip-tr|tl|br|bl</dd>
+          <dt>[layout preset]</dt><dd>single|split|stack|thirds|pip-tr|tl|br|bl</dd>
           <dt>[frame id key:val …]</dt><dd>slot|bg|character|view|facing|rect:x,y,w,h</dd>
           <dt>[frame id clear]</dt><dd>remove a frame (never the last one)</dd>
           <dt>[scene bg]</dt><dd>set active frame's background</dd>
           <dt>[frameId direction]</dt><dd>target that frame, e.g. [left wave]</dd>
+          <dt>?clean URL param</dt><dd>chromeless view: hides this panel &amp; the prompter, stage fills the window — for vertical/Shorts recording</dd>
         </dl>
 
         <h3>Content &amp; overlays</h3>
@@ -282,6 +290,7 @@
       <div class="chips" id="layout-buttons">
         <button type="button" data-preset="single">single</button>
         <button type="button" data-preset="split">split</button>
+        <button type="button" data-preset="stack">stack</button>
         <button type="button" data-preset="thirds">thirds</button>
         <button type="button" data-preset="pip-tr">pip</button>
       </div>
@@ -340,6 +349,12 @@
   </aside>
 
   <script>
+    // ?clean: chromeless performance view — hides the authoring panel (and
+    // teleprompter, via CSS) so #stage fills the whole window. Everything
+    // else (SSE, captions, overlays, transitions) keeps working; the show is
+    // driven from another tab or the API. Combinable with ?shot.
+    if (location.search.includes('clean')) document.body.classList.add('clean');
+
     // ?shot: hold the load event open so headless screenshots capture the booted
     // stage; ?shot&d=8000 extends the hold for later scene states (default 3s)
     if (location.search.includes('shot')) {

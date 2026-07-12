@@ -18,6 +18,13 @@ _HTML = r'''<!doctype html>
     display: grid; grid-template-columns: 1fr 340px;
     height: 100vh; overflow: hidden;
   }
+  /* ---- clean mode: chromeless performance view (?clean) — hide the
+     authoring panel and teleprompter so #stage fills the whole window; the
+     show is driven from another tab/api, this is purely a display view. */
+  body.clean { grid-template-columns: 1fr; }
+  body.clean aside { display: none; }
+  body.clean #prompter { display: none; }
+
   main { display: flex; flex-direction: column; min-width: 0; }
 
   #stage {
@@ -204,11 +211,12 @@ _HTML = r'''<!doctype html>
 
         <h3>Scene &amp; frames</h3>
         <dl>
-          <dt>[layout preset]</dt><dd>single|split|thirds|pip-tr|tl|br|bl</dd>
+          <dt>[layout preset]</dt><dd>single|split|stack|thirds|pip-tr|tl|br|bl</dd>
           <dt>[frame id key:val …]</dt><dd>slot|bg|character|view|facing|rect:x,y,w,h</dd>
           <dt>[frame id clear]</dt><dd>remove a frame (never the last one)</dd>
           <dt>[scene bg]</dt><dd>set active frame's background</dd>
           <dt>[frameId direction]</dt><dd>target that frame, e.g. [left wave]</dd>
+          <dt>?clean URL param</dt><dd>chromeless view: hides this panel &amp; the prompter, stage fills the window — for vertical/Shorts recording</dd>
         </dl>
 
         <h3>Content &amp; overlays</h3>
@@ -288,6 +296,7 @@ _HTML = r'''<!doctype html>
       <div class="chips" id="layout-buttons">
         <button type="button" data-preset="single">single</button>
         <button type="button" data-preset="split">split</button>
+        <button type="button" data-preset="stack">stack</button>
         <button type="button" data-preset="thirds">thirds</button>
         <button type="button" data-preset="pip-tr">pip</button>
       </div>
@@ -433,6 +442,7 @@ _HTML = r'''<!doctype html>
   const LAYOUT_FRAMES = {
     single: ['main'],
     split: ['left', 'right'],
+    stack: ['top', 'bottom'],
     thirds: ['third-l', 'third-c', 'third-r'],
     'pip-tr': ['main', 'pip'], 'pip-tl': ['main', 'pip'],
     'pip-br': ['main', 'pip'], 'pip-bl': ['main', 'pip'],
@@ -934,6 +944,8 @@ const SLOTS = {
   full: [0, 0, 100, 100],
   left: [0, 0, 50, 100],
   right: [50, 0, 50, 100],
+  top: [0, 0, 100, 50],
+  bottom: [0, 50, 100, 50],
   'third-l': [0, 0, 33.34, 100],
   'third-c': [33.33, 0, 33.34, 100],
   'third-r': [66.66, 0, 33.34, 100],
@@ -947,6 +959,7 @@ const SLOTS = {
 const LAYOUT_PRESETS = {
   single: [{ id: 'main', slot: 'full' }],
   split: [{ id: 'left', slot: 'left' }, { id: 'right', slot: 'right' }],
+  stack: [{ id: 'top', slot: 'top' }, { id: 'bottom', slot: 'bottom' }],
   thirds: [
     { id: 'third-l', slot: 'third-l' },
     { id: 'third-c', slot: 'third-c' },
